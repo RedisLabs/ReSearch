@@ -1,6 +1,7 @@
 package com.redislabs.research;
 
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -11,6 +12,15 @@ public class Document implements Serializable {
     private String id;
     private Map<String, Object> properties;
 
+    public Document(String id) {
+        this.id = id;
+        properties = new HashMap<>();
+    }
+
+    public Document set(String key, Object value) {
+        properties.put(key, value);
+        return this;
+    }
     /**
      * return the property value inside a key
      *

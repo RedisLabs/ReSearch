@@ -7,9 +7,9 @@ import java.util.List;
 /**
  * Created by dvirsky on 07/02/16.
  */
-class Spec {
+public class Spec {
 
-    enum IndexingType {
+    public enum IndexingType {
         FullText,
         Prefix,
         Geo,
@@ -24,6 +24,14 @@ class Spec {
             this.name = name;
             this.type = type;
         }
+
+
+    }
+    public static Field prefix(String name) {
+        return new Field(name, IndexingType.Prefix);
+    }
+    public static Field numeric(String name) {
+        return new Field(name, IndexingType.Numeric);
     }
 
     public List<Field> fields;
