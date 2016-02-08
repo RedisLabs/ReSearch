@@ -11,7 +11,7 @@ class Spec {
 
     enum IndexingType {
         FullText,
-        Suffix,
+        Prefix,
         Geo,
         Numeric,
     }

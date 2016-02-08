@@ -1,8 +1,10 @@
 package com.redislabs.research.redis;
 
+import java.util.List;
+
 /**
  * Created by dvirsky on 07/02/16.
  */
 public interface Encoder<T> {
-    byte[] encode(T obj);
+    List<byte[]> encode(T obj);
 }
