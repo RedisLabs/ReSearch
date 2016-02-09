@@ -70,8 +70,25 @@ public class SimpleIndex implements Index {
     }
 
     @Override
-    public List<String> get(Query q) {
-        return null;
+    public List<String> get(Query q) throws IOException {
+
+        Range rng = new Range(q);
+        Jedis conn = pool.getResource();
+        Set<String> entries;
+        if (q.sort != null && q.sort.limit != null && q.sort.offset != null) {
+            entries = conn.zrangeByLex(name, new String(rng.from), new String(rng.to), q.sort.offset, q.sort.limit);
+        } else {
+            entries = conn.zrangeByLex(name, new String(rng.from), new String(rng.to));
+        }
+
+        List<String>ids = new ArrayList<>(entries.size());
+        for (String entry : entries) {
+            ids.add(entry.substring(entry.lastIndexOf("||") + 2));
+        }
+
+        conn.close();
+        return ids;
+
     }
 
     @Override
@@ -81,7 +98,10 @@ public class SimpleIndex implements Index {
 
     @Override
     public Boolean drop() {
-        return null;
+        Jedis conn = pool.getResource();
+        Boolean ret = conn.del(name) != 0;
+        conn.close();
+        return ret;
     }
 
     List<byte[]> encode(Document doc) throws IOException {
@@ -120,6 +140,7 @@ public class SimpleIndex implements Index {
 
             }
             // append the id to the entry
+            buf.write('|');
             buf.write(doc.id().getBytes());
             ret.add(buf.toByteArray());
         }
@@ -129,33 +150,131 @@ public class SimpleIndex implements Index {
 
     }
 
-    // TODO - move this to some util
-    public static <T> List<List<T>> cartesianProduct(List<List<T>> sets) {
-        List<List<T>> tuples = new ArrayList<>();
 
-        for (List<T> set : sets) {
-            if (tuples.isEmpty()) {
-                for (T t : set) {
-                   List<T> tuple = new ArrayList<T>();
-                    tuple.add(t);
-                    tuples.add(tuple);
+    /// here for testing purposes
+    Range getRange(Query q) throws IOException {
+        return new Range(q);
+    }
+    /**
+     * Range represents a lexicographical range
+     */
+    class Range {
+        byte []from;
+        byte []to;
+
+
+        public Range(Query q) throws IOException, RuntimeException {
+
+            ByteArrayOutputStream frbuf = new ByteArrayOutputStream();
+            frbuf.write('[');
+            ByteArrayOutputStream tobuf = new ByteArrayOutputStream();
+            tobuf.write('(');
+            boolean cont = true;
+            for (Spec.Field field : spec.fields) {
+                if (!cont) {
+                    break;
                 }
-            } else {
-                List<List<T>> newTuples = new ArrayList<>();
-
-                for (List<T> subTuple : tuples) {
-                    for (T t : set) {
-                        List<T> tuple = new ArrayList<>();
-                        tuple.addAll(subTuple);
-                        tuple.add(t);
-                        newTuples.add(tuple);
+                Query.Filter flt = null;
+                for (Query.Filter f : q.filters) {
+                    if (f.property == field.name) {
+                        flt = f;
+                        break;
                     }
                 }
 
-                tuples = newTuples;
+                if (flt == null) {
+                    break;
+                }
+
+                Encoder enc = encoders.get(field.type);
+                if (enc == null) {
+                    throw new RuntimeException("No encoder for field type "+field.type.toString());
+                }
+                List<byte[]> encoded;
+                switch (flt.op) {
+                    case Equals:
+                        if (flt.values.length != 1) {
+                            throw new RuntimeException("Only one value allowed for EQ filter");
+                        }
+                        encoded = enc.encode(flt.values[0]);
+                        tobuf.write(encoded.get(0));
+                        tobuf.write('|');
+                        frbuf.write(encoded.get(0));
+                        frbuf.write('|');
+                        break;
+                    case Between:
+                        if (flt.values.length != 2) {
+                            throw new RuntimeException("Exactly two value allowed for BETWEEN filter");
+                        }
+                        encoded = enc.encode(flt.values[0]);
+                        frbuf.write(encoded.get(0));
+                        frbuf.write('|');
+                        encoded = enc.encode(flt.values[1]);
+                        tobuf.write(encoded.get(0));
+                        tobuf.write('|');
+                        break;
+                    case Prefix:
+                        if (flt.values.length != 1) {
+                            throw new RuntimeException("Only one value allowed for PREFIX filter");
+                        }
+                        encoded = enc.encode(flt.values[0]);
+                        tobuf.write(encoded.get(0));
+                        frbuf.write(encoded.get(0));
+
+                        //we can't continue after a prefix
+                        cont = false;
+                        break;
+
+                    // TODO - implement those...
+                    case Greater:
+                    case GreaterEquals:
+                    case Less:
+                    case LessEqual:
+                    case Radius:
+
+                    default:
+                        throw new RuntimeException("No way to encode range for filter op " + flt.op.toString());
+                }
+
+
+            }
+            tobuf.write(255);
+
+            from = frbuf.toByteArray();
+            to = tobuf.toByteArray();
+
+        }
+    }
+
+
+
+    // TODO - move this to some util
+    public static <T> List<List<T>> cartesianProduct(List<List<T>> sets) {
+        List<List<T>> ret = new ArrayList<>();
+
+        for (List<T> set : sets) {
+            if (ret.isEmpty()) {
+                for (T t : set) {
+                   List<T> tuple = new ArrayList<T>();
+                    tuple.add(t);
+                    ret.add(tuple);
+                }
+            } else {
+                List<List<T>> tmp = new ArrayList<>();
+
+                for (List<T> subList : ret) {
+                    for (T t : set) {
+                        List<T> lst = new ArrayList<>();
+                        lst.addAll(subList);
+                        lst.add(t);
+                        tmp.add(lst);
+                    }
+                }
+
+                ret = tmp;
             }
         }
 
-        return tuples;
+        return ret;
     }
 }
