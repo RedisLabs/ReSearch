@@ -5,16 +5,16 @@ import com.redislabs.research.Index;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
 import com.redislabs.research.text.NaiveNormalizer;
-import redis.clients.util.Pool;
 
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.net.URI;
 import java.util.*;
 
 /**
- * Created by dvirsky on 07/02/16.
+ * SimpleIndex is the basic, prefix or exact value index, withuot partitioning.
+ * Partitioning is built by creating multiple instances of SimpleIndex for each partition
  */
 public class SimpleIndex implements Index {
 
@@ -30,20 +30,26 @@ public class SimpleIndex implements Index {
     }};
 
 
-
-
-
-
+    /**
+     * Constructor
+     * @param redisURI the redis server we connect to
+     * @param name the index name
+     * @param spec index spec
+     */
     public SimpleIndex(String redisURI, String name, Spec spec) {
 
         this.spec = spec;
         this.name = name;
-        pool = new JedisPool(new JedisPoolConfig(), "localhost");
+        pool = new JedisPool(new JedisPoolConfig(), URI.create(redisURI));
 
     }
 
 
-
+    /**
+     * index a set of coduments in the index. This is done with a single pipeline for speed
+     * @param docs a list of documents to be indexed
+     * @return
+     */
     @Override
     public Boolean index(Document ...docs) {
 
@@ -69,18 +75,28 @@ public class SimpleIndex implements Index {
 
     }
 
+    /**
+     * Get ids of documents indexed in the index
+     * @param q the query to look for
+     * @return a list of string ids
+     * @throws IOException
+     */
     @Override
     public List<String> get(Query q) throws IOException {
 
+        // Get the redis ranges to look for
         Range rng = new Range(q);
         Jedis conn = pool.getResource();
         Set<String> entries;
+
+        // get the ids - either with limit or not
         if (q.sort != null && q.sort.limit != null && q.sort.offset != null) {
             entries = conn.zrangeByLex(name, new String(rng.from), new String(rng.to), q.sort.offset, q.sort.limit);
         } else {
             entries = conn.zrangeByLex(name, new String(rng.from), new String(rng.to));
         }
 
+        // extract the ids from the entries
         List<String>ids = new ArrayList<>(entries.size());
         for (String entry : entries) {
             ids.add(entry.substring(entry.lastIndexOf("||") + 2));
@@ -91,11 +107,21 @@ public class SimpleIndex implements Index {
 
     }
 
+    /**
+     * Delete document-ids from the index
+     * @param ids the list of ids to delete
+     * @return
+     * @TODO not implemented
+     */
     @Override
     public Boolean delete(String... ids) {
         return null;
     }
 
+    /**
+     * Drop the index completely
+     * @return
+     */
     @Override
     public Boolean drop() {
         Jedis conn = pool.getResource();
@@ -104,6 +130,12 @@ public class SimpleIndex implements Index {
         return ret;
     }
 
+    /**
+     * Encode a document's values into ZSET values to be indexed
+     * @param doc
+     * @return
+     * @throws IOException
+     */
     List<byte[]> encode(Document doc) throws IOException {
 
         List<List<byte[]>> encoded = new ArrayList<>(spec.fields.size());

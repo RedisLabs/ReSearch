@@ -38,7 +38,7 @@ public class SimpleIndexTest extends TestCase {
         Document[] docs = new Document[] {
                 new Document("doc1").set("foo", "hello world").set("bar", Math.PI),
                 new Document("doc2").set("foo", "hello werld").set("bar", Math.PI+1),
-                new Document("doc2").set("foo", "jello world").set("bar", Math.PI-1),
+                new Document("doc3").set("foo", "jello world").set("bar", Math.PI-1),
         };
 
         idx.index(docs);
@@ -46,7 +46,11 @@ public class SimpleIndexTest extends TestCase {
 
         try {
             List<String> ids = idx.get(new Query("myindex").filterPrefix("foo", "hell"));
-            System.out.println(ids);
+
+            assertTrue(ids.contains("doc1"));
+            assertTrue(ids.contains("doc2"));
+            assertFalse(ids.contains("doc3"));
+
         } catch (IOException e) {
             e.printStackTrace();
             fail();
