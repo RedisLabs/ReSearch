@@ -62,6 +62,15 @@ public class Query {
         public Integer offset;
         /** If set, paging limit */
         public Integer limit;
+
+        public static Sorting Default() {
+            Sorting ret = new Sorting();
+            ret.offset = 0;
+            ret.limit = 10;
+            ret.by = "";
+            ret.ascending = true;
+            return ret;
+        }
     }
 
     /**
@@ -86,7 +95,7 @@ public class Query {
     public Query(String indexName) {
         this.indexName = indexName;
         filters = new LinkedList<>();
-        sort = new Sorting();
+        sort = Sorting.Default();
     }
 
     /**
