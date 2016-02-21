@@ -6,11 +6,11 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Created by dvirsky on 07/02/16.
+ * The basic interface for all indexes
  */
 public interface Index {
     Boolean index(Document ...docs);
-    List<String> get(Query q) throws IOException;
+    List<String> get(Query q) throws IOException, InterruptedException;
     Boolean delete(String... ids);
     Boolean drop();
 }

@@ -8,24 +8,30 @@ import com.redislabs.research.Spec;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.*;
 import java.util.zip.CRC32;
 
 /**
- * Created by dvirsky on 21/02/16.
+ * PartitionedIndex wraps multiple partitions of simple indexes and queries them concurrently
  */
 public class PartitionedIndex implements Index {
 
     Index[] partitions;
+    ExecutorService pool;
+    int timeoutMilli;
 
-    public PartitionedIndex(String name, Spec spec, int numPartitions, String ...redisURIs ) {
+    public PartitionedIndex(String name, Spec spec, int numPartitions, int timeoutMilli, String ...redisURIs ) {
 
         partitions = new Index[numPartitions];
+        this.timeoutMilli = timeoutMilli;
         for (int i =0; i < numPartitions; i++) {
             String pname = String.format("%s{%d}", name, i);
             partitions[i] = new SimpleIndex(redisURIs[i % redisURIs.length], pname, spec);
         }
+
+        pool = Executors.newFixedThreadPool(numPartitions*2);
+
 
     }
 
@@ -48,22 +54,36 @@ public class PartitionedIndex implements Index {
     }
 
     @Override
-    public List<String> get(Query q) throws IOException {
-        // TODO: parallelize
-        List<List<String>> results = new ArrayList<>(partitions.length);
+    public List<String> get(final Query q) throws IOException, InterruptedException {
 
+        // this is the queue we use to aggregate the results
+        final ArrayBlockingQueue<List<String>> queue = new ArrayBlockingQueue<>(partitions.length);
+
+        // submit the sub tasks to the thread pool
         for (Index idx : partitions) {
-            results.add(idx.get(q));
+            final Index fidx = idx;
+
+            pool.submit( new Callable<Void>() {
+                public Void call() throws IOException, InterruptedException {
+                    List<String> r = fidx.get(q);
+                    System.out.printf("Putting %d results in queue", r.size());
+                    queue.put(r);
+                    return null;
+                }
+            });
+
         }
 
+
+        // collect the results
         List<String> ret = new ArrayList<>(q.sort.offset + q.sort.limit);
-        for (List<String> tmp : results) {
-            if (tmp != null && tmp.size() > 0) {
-                ret.addAll(tmp);
-            }
-            if (ret.size() >= q.sort.offset+q.sort.limit) {
-                break;
-            }
+        int took = 0;
+        while (ret.size() < q.sort.offset + q.sort.limit && took < partitions.length) {
+
+            List<String> res = queue.poll(timeoutMilli, TimeUnit.MILLISECONDS);
+            ret.addAll(res);
+            took++;
+
         }
         return ret.subList(q.sort.offset, Math.min(q.sort.offset+q.sort.limit, ret.size()));
 
