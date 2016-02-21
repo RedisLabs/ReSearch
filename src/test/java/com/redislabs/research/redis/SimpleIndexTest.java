@@ -41,7 +41,11 @@ public class SimpleIndexTest extends TestCase {
                 new Document("doc3").set("foo", "jello world").set("bar", Math.PI-1),
         };
 
-        idx.index(docs);
+        try {
+            idx.index(docs);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
 
         try {

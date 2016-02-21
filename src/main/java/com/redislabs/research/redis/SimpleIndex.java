@@ -25,7 +25,7 @@ public class SimpleIndex implements Index {
 
     // a map of type to encoder
     private static final Map<Spec.IndexingType, Encoder> encoders = new HashMap<Spec.IndexingType, Encoder>(){{
-        put(Spec.IndexingType.Prefix, new Encoders.Prefix(new NaiveNormalizer(), true));
+        put(Spec.IndexingType.Prefix, new Encoders.Prefix(new NaiveNormalizer(), false));
         put(Spec.IndexingType.Numeric, new Encoders.Numeric());
     }};
 
@@ -51,10 +51,11 @@ public class SimpleIndex implements Index {
      * @return
      */
     @Override
-    public Boolean index(Document ...docs) {
+    public Boolean index(Document ...docs) throws IOException {
 
 
-        Pipeline pipe = pool.getResource().pipelined();
+        Jedis conn = pool.getResource();
+        Pipeline pipe = conn.pipelined();
         List<byte[]> entries;
         for (Document doc : docs) {
             try {
@@ -70,6 +71,8 @@ public class SimpleIndex implements Index {
 
         }
         pipe.sync();
+        conn.close();
+
 
         return true;
 

@@ -9,7 +9,7 @@ import java.util.List;
  * The basic interface for all indexes
  */
 public interface Index {
-    Boolean index(Document ...docs);
+    Boolean index(Document ...docs) throws IOException;
     List<String> get(Query q) throws IOException, InterruptedException;
     Boolean delete(String... ids);
     Boolean drop();

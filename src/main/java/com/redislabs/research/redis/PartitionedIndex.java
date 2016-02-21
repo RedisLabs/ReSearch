@@ -8,6 +8,7 @@ import com.redislabs.research.Spec;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.zip.CRC32;
@@ -43,11 +44,22 @@ public class PartitionedIndex implements Index {
     }
 
     @Override
-    public Boolean index(Document  ...docs) {
+    public Boolean index(Document  ...docs) throws IOException {
 
+        ArrayList[] parts = new ArrayList[partitions.length];
+        for (int i =0; i < partitions.length; i++) {
+            parts[i] = new ArrayList(1);
+        }
         // TODO: Make this transactional and pipelined
         for (Document doc : docs) {
-            partitions[partitionFor(doc.id())].index(doc);
+            parts[partitionFor(doc.id())].add(doc);
+
+        }
+
+        for (int i =0; i < partitions.length; i++) {
+            if (parts[i].size() > 0) {
+                partitions[i].index((Document[]) parts[i].toArray(new Document[parts[i].size()]));
+            }
         }
 
         return true;
@@ -66,7 +78,7 @@ public class PartitionedIndex implements Index {
             pool.submit( new Callable<Void>() {
                 public Void call() throws IOException, InterruptedException {
                     List<String> r = fidx.get(q);
-                    System.out.printf("Putting %d results in queue", r.size());
+
                     queue.put(r);
                     return null;
                 }
@@ -92,14 +104,11 @@ public class PartitionedIndex implements Index {
     @Override
     public Boolean delete(String... ids) {
 
-
         for (Index idx : partitions) {
             idx.delete(ids);
         }
 
         return true;
-
-
     }
 
     @Override

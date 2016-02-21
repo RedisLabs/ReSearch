@@ -1,5 +1,7 @@
 package com.redislabs.research;
 
+import com.google.gson.Gson;
+
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
@@ -38,6 +40,12 @@ public class Document implements Serializable {
      */
     public String id() {
         return id;
+    }
+
+    private static Gson gson = new Gson();
+    @Override
+    public String toString() {
+        return gson.toJson(this);
     }
 
 }
