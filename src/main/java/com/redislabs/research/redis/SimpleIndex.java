@@ -110,19 +110,20 @@ public class SimpleIndex implements Index {
         // Get the redis ranges to look for
         Range rng = new Range(q);
         Jedis conn = pool.getResource();
-        Set<String> entries;
+        Set<byte[]> entries;
 
         // get the ids - either with limit or not
         if (q.sort != null && q.sort.limit != null && q.sort.offset != null) {
-            entries = conn.zrangeByLex(name, new String(rng.from), new String(rng.to), q.sort.offset, q.sort.limit);
+            entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to, q.sort.offset, q.sort.limit);
         } else {
-            entries = conn.zrangeByLex(name, new String(rng.from), new String(rng.to));
+            entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to);
         }
 
         // extract the ids from the entries
         List<String>ids = new ArrayList<>(entries.size());
-        for (String entry : entries) {
-            ids.add(entry.substring(entry.lastIndexOf("||") + 2));
+        for (byte[] entry : entries) {
+            String se = new String(entry);
+            ids.add(se.substring(se.lastIndexOf("||") + 2));
         }
 
         conn.close();
@@ -223,6 +224,7 @@ public class SimpleIndex implements Index {
             ByteArrayOutputStream frbuf = new ByteArrayOutputStream();
             frbuf.write('[');
             ByteArrayOutputStream tobuf = new ByteArrayOutputStream();
+
             tobuf.write('(');
             boolean cont = true;
             for (Spec.Field field : spec.fields) {
@@ -276,19 +278,20 @@ public class SimpleIndex implements Index {
                         tobuf.write(encoded.get(0));
                         frbuf.write(encoded.get(0));
 
+
                         //we can't continue after a prefix
                         cont = false;
                         break;
                     case Near:
-                        if (flt.values.length != 1 || !(flt.values[0] instanceof double[])) {
+                        if (flt.values.length != 2 || !(flt.values instanceof Double[])) {
                             throw new RuntimeException("Near filter accepts two doubles only!");
                         }
-                        encoded = enc.encode(flt.values[0]);
+                        encoded = enc.encode(flt.values);
                         tobuf.write(encoded.get(0));
+                        tobuf.write('|');
                         frbuf.write(encoded.get(0));
-
-
-
+                        frbuf.write('|');
+                        break;
                         // TODO - implement those...
                     case Greater:
                     case GreaterEquals:

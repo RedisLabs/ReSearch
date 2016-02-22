@@ -166,7 +166,7 @@ public class Query {
      * @return the query itself, for builder-style syntax
      */
     public Query filterNear(String property, double lat, double lon) {
-        filters.add(new Filter<>(property, Op.Near, new double[]{lat, lon}));
+        filters.add(new Filter<>(property, Op.Near, lat, lon));
         return this;
     }
 }
