@@ -24,11 +24,7 @@ public class SimpleIndex implements Index {
     private JedisPool pool;
 
     // a map of type to encoder
-    private static final Map<Spec.IndexingType, Encoder> encoders = new HashMap<Spec.IndexingType, Encoder>(){{
-        put(Spec.IndexingType.Prefix, new Encoders.Prefix(new NaiveNormalizer(), false));
-        put(Spec.IndexingType.Numeric, new Encoders.Numeric());
-    }};
-
+    private Map<String, Encoder> encoders = new HashMap<>();
 
     /**
      * Constructor
@@ -41,6 +37,30 @@ public class SimpleIndex implements Index {
         this.spec = spec;
         this.name = name;
         pool = new JedisPool(new JedisPoolConfig(), URI.create(redisURI));
+        createEncoders(spec);
+
+    }
+
+    private void createEncoders(Spec spec) {
+
+        for (Spec.Field f : spec.fields) {
+
+            switch (f.type) {
+                case Prefix:
+                    encoders.put(f.name, new Encoders.Prefix(new NaiveNormalizer(), ((Spec.PrefixField)f).indexSuffixes));
+                    break;
+                case Numeric:
+                    encoders.put(f.name, new Encoders.Numeric());
+                    break;
+                case Geo:
+                    encoders.put(f.name, new Encoders.Geohash(((Spec.GeoField)f).precision));
+                    break;
+                default:
+                    throw  new RuntimeException("Invalid index type " + f.type.toString());
+            }
+
+        }
+
 
     }
 
@@ -149,9 +169,9 @@ public class SimpleIndex implements Index {
                 throw new RuntimeException("missing property in document: " + field.name);
             }
 
-            Encoder enc = encoders.get(field.type);
+            Encoder enc = encoders.get(field.name);
             if (enc == null) {
-                throw new RuntimeException("Missing encoder type " + field.type.toString());
+                throw new RuntimeException("Missing encoder for " + field.name);
             }
 
             encoded.add(enc.encode(prop));
@@ -221,9 +241,9 @@ public class SimpleIndex implements Index {
                     break;
                 }
 
-                Encoder enc = encoders.get(field.type);
+                Encoder enc = encoders.get(field.name);
                 if (enc == null) {
-                    throw new RuntimeException("No encoder for field type "+field.type.toString());
+                    throw new RuntimeException("No encoder for field type "+field.name);
                 }
                 List<byte[]> encoded;
                 switch (flt.op) {
@@ -259,8 +279,17 @@ public class SimpleIndex implements Index {
                         //we can't continue after a prefix
                         cont = false;
                         break;
+                    case Near:
+                        if (flt.values.length != 1 || !(flt.values[0] instanceof double[])) {
+                            throw new RuntimeException("Near filter accepts two doubles only!");
+                        }
+                        encoded = enc.encode(flt.values[0]);
+                        tobuf.write(encoded.get(0));
+                        frbuf.write(encoded.get(0));
 
-                    // TODO - implement those...
+
+
+                        // TODO - implement those...
                     case Greater:
                     case GreaterEquals:
                     case Less:

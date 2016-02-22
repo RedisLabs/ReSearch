@@ -14,7 +14,7 @@ import java.util.List;
 public class PartitionedIndexTest extends TestCase {
 
     public void testPartitionFor() throws Exception {
-        Spec spec = new Spec(Spec.prefix("foo"));
+        Spec spec = new Spec(Spec.prefix("foo", false));
 
         PartitionedIndex pi = new PartitionedIndex("foo", spec, 3, 500, "redis://localhost:6379");
         assertEquals(3, pi.partitions.length);
@@ -26,7 +26,7 @@ public class PartitionedIndexTest extends TestCase {
 
     public void testIndex() throws Exception {
 
-        Spec spec = new Spec(Spec.prefix("foo"));
+        Spec spec = new Spec(Spec.prefix("foo", true));
         PartitionedIndex pi = new PartitionedIndex("foo", spec, 3, 500, "redis://localhost:6379");
         Document[] docs = new Document[] {
                 new Document("doc1").set("foo", "hello world").set("bar", Math.PI),
@@ -43,6 +43,12 @@ public class PartitionedIndexTest extends TestCase {
             assertTrue(ids.contains("doc1"));
             assertTrue(ids.contains("doc2"));
             assertFalse(ids.contains("doc3"));
+
+            ids = pi.get(new Query("myindex").filterPrefix("foo", "world"));
+
+            assertTrue(ids.contains("doc1"));
+            assertFalse(ids.contains("doc2"));
+            assertTrue(ids.contains("doc3"));
 
         } catch (IOException e) {
             e.printStackTrace();

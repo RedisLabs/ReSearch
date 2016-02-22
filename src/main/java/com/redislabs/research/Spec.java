@@ -27,12 +27,35 @@ public class Spec {
 
 
     }
-    public static Field prefix(String name) {
-        return new Field(name, IndexingType.Prefix);
+
+    public static class PrefixField extends  Field {
+
+        public boolean indexSuffixes;
+
+        public PrefixField(String name, boolean indexSuffixes) {
+            super(name, IndexingType.Prefix);
+            this.indexSuffixes = indexSuffixes;
+        }
     }
+
+    public static PrefixField prefix(String name, boolean indexSuffixes) {
+        return new PrefixField(name, indexSuffixes);
+    }
+
+    public static class GeoField extends Field {
+
+        public int precision;
+        public GeoField(String name, int precision) {
+            super(name, IndexingType.Geo);
+            this.precision = precision;
+        }
+    }
+
     public static Field numeric(String name) {
         return new Field(name, IndexingType.Numeric);
     }
+
+
 
     public List<Field> fields;
     public Spec(Field ...fields) {

@@ -194,7 +194,7 @@ public class Main {
 
         RunOptions opts = new RunOptions(args);
 
-        Spec spec = new Spec(Spec.prefix("name"));
+        Spec spec = new Spec(Spec.prefix("name", false));
 
 
         PartitionedIndex pi = new PartitionedIndex("locs_name", spec, opts.numPartitions, 500,

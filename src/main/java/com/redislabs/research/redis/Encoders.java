@@ -1,7 +1,9 @@
 package com.redislabs.research.redis;
 
+import ch.hsr.geohash.GeoHash;
 import com.redislabs.research.text.NaiveNormalizer;
 import com.redislabs.research.text.TextNormalizer;
+import com.sun.deploy.util.ArrayUtil;
 import com.sun.org.apache.xpath.internal.operations.Bool;
 
 import java.nio.ByteBuffer;
@@ -75,6 +77,37 @@ public class Encoders {
                 }
             }
             return ret;
+        }
+    }
+
+
+    public static class Geohash implements Encoder<Double[]> {
+
+
+        public final static int PRECISION_156KM = 3;
+        public final static int PRECISION_40KM = 4;
+        public final static int PRECISION_4KM = 5;
+        public final static int PRECISION_1KM = 6;
+        public final static int PRECISION_150M = 7;
+
+        private int precision;
+
+        public Geohash(int precision) {
+            this.precision = precision;
+        }
+
+        public void setPrecision(int precision) {
+            this.precision = precision;
+        }
+
+        @Override
+        public List<byte[]> encode(Double[] latlon) {
+
+            GeoHash h = GeoHash.withCharacterPrecision(latlon[0], latlon[1], precision);
+            ArrayList<byte[]> ret = new ArrayList<>(1);
+            ret.add(h.toBase32().getBytes());
+            return ret;
+
         }
     }
 

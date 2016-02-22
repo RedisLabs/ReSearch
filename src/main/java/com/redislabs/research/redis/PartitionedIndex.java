@@ -93,7 +93,9 @@ public class PartitionedIndex implements Index {
         while (ret.size() < q.sort.offset + q.sort.limit && took < partitions.length) {
 
             List<String> res = queue.poll(timeoutMilli, TimeUnit.MILLISECONDS);
-            ret.addAll(res);
+            if (res != null) {
+                ret.addAll(res);
+            }
             took++;
 
         }

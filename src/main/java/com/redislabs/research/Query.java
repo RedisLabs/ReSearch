@@ -21,6 +21,7 @@ public class Query {
         LessEqual,
         Between,
         Radius,
+        Near,
     }
 
     /**
@@ -152,6 +153,20 @@ public class Query {
      */
     public Query filterIn(String property, Object ...values) {
         filters.add(new Filter<>(property, Op.In, values));
+        return this;
+    }
+
+    /**
+     * Create a NEAR filter - it's a rough proximit geo filter, with no exact radius - but rather a GEOAHASH match.
+     * i.e. the filter will be positive if the given lat,lon and documents' lat,lon are in the same geobox as
+     * defined in the index spec
+     * @param property the name of the property filtered by
+     * @param lat latitude to match
+     * @param  lon longitude to match
+     * @return the query itself, for builder-style syntax
+     */
+    public Query filterNear(String property, double lat, double lon) {
+        filters.add(new Filter<>(property, Op.Near, new double[]{lat, lon}));
         return this;
     }
 }

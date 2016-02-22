@@ -19,9 +19,9 @@ public class SimpleIndexTest extends TestCase {
 
         Document doc = new Document("123").set("foo", "hello world").set("bar", 123);
 
-        Spec spec = new Spec(Spec.prefix("foo"), Spec.numeric("bar"));
+        Spec spec = new Spec(Spec.prefix("foo",false), Spec.numeric("bar"));
 
-        SimpleIndex idx = new SimpleIndex("localhost:6379", "myindex", spec);
+        SimpleIndex idx = new SimpleIndex("redis://localhost:6379", "myindex", spec);
         List<byte[]> entries = idx.encode(doc);
         for (byte[] entry : entries) {
             System.out.println(HexBin.encode(entry).toString());
@@ -31,9 +31,9 @@ public class SimpleIndexTest extends TestCase {
     public void testIndex() {
 
 
-        Spec spec = new Spec(Spec.prefix("foo"));
+        Spec spec = new Spec(Spec.prefix("foo", false));
 
-        SimpleIndex idx = new SimpleIndex("localhost:6379", "myindex", spec);
+        SimpleIndex idx = new SimpleIndex("redis://localhost:6379", "myindex", spec);
 
         Document[] docs = new Document[] {
                 new Document("doc1").set("foo", "hello world").set("bar", Math.PI),
@@ -67,8 +67,8 @@ public class SimpleIndexTest extends TestCase {
 
     public void testRange() {
 
-        Spec spec = new Spec( Spec.numeric("bar"), Spec.prefix("foo"));
-        SimpleIndex idx = new SimpleIndex("localhost:6379", "myindex", spec);
+        Spec spec = new Spec( Spec.numeric("bar"), Spec.prefix("foo", false));
+        SimpleIndex idx = new SimpleIndex("redis://localhost:6379", "myindex", spec);
 
         Query q = new Query("myindex");
 
