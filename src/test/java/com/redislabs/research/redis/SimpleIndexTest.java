@@ -6,7 +6,6 @@ import com.redislabs.research.Spec;
 import com.sun.org.apache.xerces.internal.impl.dv.util.HexBin;
 import junit.framework.TestCase;
 
-import javax.print.Doc;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +35,7 @@ public class SimpleIndexTest extends TestCase {
 
         SimpleIndex idx = new SimpleIndex("redis://localhost:6379", "myindex", spec);
 
-        Document[] docs = new Document[] {
+        Document[] docs = {
                 new Document("doc1").set("foo", "hello world").set("bar", Math.PI),
                 new Document("doc2").set("foo", "hello werld").set("bar", Math.PI+1),
                 new Document("doc3").set("foo", "jello world").set("bar", Math.PI-1),
