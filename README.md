@@ -54,7 +54,9 @@ Index idx = new PartitionedIndex("myIndex", //index name
         redisHosts);
 
 
-// Create a document store. The index only retrieves document ids. The store actually holds the documents. This is optional if you want to implement a store yourself
+// Create a document store. The index only retrieves document ids. 
+// The store actually holds the documents. This is optional if you want to implement a store yourself
+// JSONStore just stores documents as JSON blobs in redis
 DocumentStore st = new JSONStore("redis://localhost:6379");
 ```
 
