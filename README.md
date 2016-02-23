@@ -73,6 +73,8 @@ Document[] docs = {
 };            
 
 idx.index(docs); // this call accepts multiple documents and indexes them as a single transaction
+
+st.store(docs); //save the documents in the store
 ```
 
 ### 5. query the index
