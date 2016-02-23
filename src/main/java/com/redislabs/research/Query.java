@@ -157,7 +157,7 @@ public class Query {
     }
 
     /**
-     * Create a NEAR filter - it's a rough proximit geo filter, with no exact radius - but rather a GEOAHASH match.
+     * Create a NEAR filter - it's a rough proximity geo filter, with no exact radius - but rather a GEOAHASH match.
      * i.e. the filter will be positive if the given lat,lon and documents' lat,lon are in the same geobox as
      * defined in the index spec
      * @param property the name of the property filtered by
@@ -169,4 +169,45 @@ public class Query {
         filters.add(new Filter<>(property, Op.Near, lat, lon));
         return this;
     }
+
+    /**
+     * Create a GREATER THAN filter
+     * @param property the name of the property filtered by
+     * @param value number or string to compare
+     */
+    public Query filterGreaterThan(String property, Object value) {
+        filters.add(new Filter<>(property, Op.Greater, value));
+        return this;
+    }
+
+    /**
+     * Create a GREATER THAN OR EQUAL filter
+     * @param property the name of the property filtered by
+     * @param value number or string to compare
+     */
+    public Query filterGreaterEqual(String property, Object value) {
+        filters.add(new Filter<>(property, Op.GreaterEquals, value));
+        return this;
+    }
+
+    /**
+     * Create a LESS THAN filter
+     * @param property the name of the property filtered by
+     * @param value number or string to compare
+     */
+    public Query filterLessThan(String property, Object value) {
+        filters.add(new Filter<>(property, Op.Less, value));
+        return this;
+    }
+
+    /**
+     * Create a LESS THAN OR EQUAL filter
+     * @param property the name of the property filtered by
+     * @param value number or string to compare
+     */
+    public Query filterLessEqual(String property, Object value) {
+        filters.add(new Filter<>(property, Op.LessEqual, value));
+        return this;
+    }
+
 }

@@ -6,6 +6,7 @@ import com.redislabs.research.Spec;
 import com.sun.org.apache.xerces.internal.impl.dv.util.HexBin;
 import junit.framework.TestCase;
 
+import javax.print.Doc;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -85,6 +86,61 @@ public class SimpleIndexTest extends TestCase {
         }
 
 
+        q = new Query("myindex");
+
+        q.filterGreaterThan("bar", 1234);
+        try {
+
+            SimpleIndex.Range rng = idx.getRange(q);
+
+            assertEquals("2800000000000004D27C", HexBin.encode(rng.from));
+            assertEquals("28FFFFFFFFFFFFFFFF7CFF", HexBin.encode(rng.to));
+
+        } catch (IOException e) {
+            fail();
+        }
+
+        q = new Query("myindex");
+
+        q.filterGreaterEqual("bar", 1234);
+        try {
+
+            SimpleIndex.Range rng = idx.getRange(q);
+
+            assertEquals("5B00000000000004D27C", HexBin.encode(rng.from));
+            assertEquals("28FFFFFFFFFFFFFFFF7CFF", HexBin.encode(rng.to));
+
+        } catch (IOException e) {
+            fail();
+        }
+
+        q = new Query("myindex");
+
+        q.filterLessThan("bar", 1234);
+        try {
+
+            SimpleIndex.Range rng = idx.getRange(q);
+
+            assertEquals("5B00000000000000007C", HexBin.encode(rng.from));
+            assertEquals("2800000000000004D27CFF", HexBin.encode(rng.to));
+
+        } catch (IOException e) {
+            fail();
+        }
+
+        q = new Query("myindex");
+
+        q.filterLessEqual("bar", 1234);
+        try {
+
+            SimpleIndex.Range rng = idx.getRange(q);
+
+            assertEquals("5B00000000000000007C", HexBin.encode(rng.from));
+            assertEquals("5B00000000000004D27CFF", HexBin.encode(rng.to));
+
+        } catch (IOException e) {
+            fail();
+        }
 
     }
 
@@ -116,5 +172,47 @@ public class SimpleIndexTest extends TestCase {
             i++;
         }
 
+    }
+
+
+    public void testGeoIndex() {
+
+        Spec spec = new Spec(new Spec.GeoField("bar", Encoders.Geohash.PRECISION_4KM),
+                            Spec.prefix("foo", false));
+        SimpleIndex idx = new SimpleIndex("redis://localhost:6379", "myindex", spec);
+        idx.drop();
+
+        Document[] docs = new Document[] {
+                new Document("doc1").set("foo", "hello world").set("bar", new Double[]{32.0667, 34.8000}),
+                new Document("doc2").set("foo", "rello werld").set("bar", new Double[]{32.0677, 34.8010}),
+                new Document("doc3").set("foo", "jello world").set("bar", new Double[]{-32.0667, -34.8000}),
+        };
+
+        try {
+            idx.index(docs);
+        } catch (IOException e) {
+            fail(e.getMessage());
+        }
+
+        Query q = new Query("myindex");
+
+        q.filterNear("bar", 32.0667, 34.8000);
+        List<String> ids = null;
+        try {
+            ids = idx.get(q);
+        } catch (IOException e) {
+            fail(e.getMessage());
+        }
+
+        assertEquals(2, ids.size());
+
+        q.filterPrefix("foo", "hell");
+        try {
+            ids = idx.get(q);
+
+        } catch (IOException e) {
+            fail(e.getMessage());
+        }
+        assertEquals(1, ids.size());
     }
 }

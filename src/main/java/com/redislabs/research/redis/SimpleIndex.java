@@ -68,7 +68,6 @@ public class SimpleIndex implements Index {
     /**
      * index a set of coduments in the index. This is done with a single pipeline for speed
      * @param docs a list of documents to be indexed
-     * @return
      */
     @Override
     public Boolean index(Document ...docs) throws IOException {
@@ -134,17 +133,15 @@ public class SimpleIndex implements Index {
     /**
      * Delete document-ids from the index
      * @param ids the list of ids to delete
-     * @return
-     * @TODO not implemented
      */
     @Override
     public Boolean delete(String... ids) {
-        return null;
+        // @TODO not implemented
+        return false;
     }
 
     /**
      * Drop the index completely
-     * @return
      */
     @Override
     public Boolean drop() {
@@ -156,8 +153,8 @@ public class SimpleIndex implements Index {
 
     /**
      * Encode a document's values into ZSET values to be indexed
-     * @param doc
-     * @return
+     * @param doc the cdocument to encode
+     * @return the index entries for this document.
      * @throws IOException
      */
     List<byte[]> encode(Document doc) throws IOException {
@@ -166,16 +163,14 @@ public class SimpleIndex implements Index {
         for (Spec.Field field : spec.fields) {
 
             Object prop = doc.property(field.name);
-            if (prop == null) {
-                throw new RuntimeException("missing property in document: " + field.name);
-            }
 
             Encoder enc = encoders.get(field.name);
             if (enc == null) {
                 throw new RuntimeException("Missing encoder for " + field.name);
             }
 
-            encoded.add(enc.encode(prop));
+            List<byte[]> bytes = enc.encode(Objects.requireNonNull(prop));
+            encoded.add(bytes);
 
         }
 
@@ -221,11 +216,15 @@ public class SimpleIndex implements Index {
 
         public Range(Query q) throws IOException, RuntimeException {
 
-            ByteArrayOutputStream frbuf = new ByteArrayOutputStream();
-            frbuf.write('[');
-            ByteArrayOutputStream tobuf = new ByteArrayOutputStream();
 
-            tobuf.write('(');
+            // we start with [ ... ( but we may change that later based on the filters
+            boolean lowerInclusive = true;
+            boolean upperInclusive = false;
+            ByteArrayOutputStream frbuf = new ByteArrayOutputStream();
+            frbuf.write('?');
+
+            ByteArrayOutputStream tobuf = new ByteArrayOutputStream();
+            tobuf.write('?');
             boolean cont = true;
             for (Spec.Field field : spec.fields) {
                 if (!cont) {
@@ -233,7 +232,7 @@ public class SimpleIndex implements Index {
                 }
                 Query.Filter flt = null;
                 for (Query.Filter f : q.filters) {
-                    if (f.property == field.name) {
+                    if (f.property.equals(field.name)) {
                         flt = f;
                         break;
                     }
@@ -250,53 +249,41 @@ public class SimpleIndex implements Index {
                 List<byte[]> encoded;
                 switch (flt.op) {
                     case Equals:
-                        if (flt.values.length != 1) {
-                            throw new RuntimeException("Only one value allowed for EQ filter");
-                        }
-                        encoded = enc.encode(flt.values[0]);
-                        tobuf.write(encoded.get(0));
-                        tobuf.write('|');
-                        frbuf.write(encoded.get(0));
-                        frbuf.write('|');
+                        encodeEqualRange(frbuf, tobuf, flt, enc);
                         break;
                     case Between:
-                        if (flt.values.length != 2) {
-                            throw new RuntimeException("Exactly two value allowed for BETWEEN filter");
-                        }
-                        encoded = enc.encode(flt.values[0]);
-                        frbuf.write(encoded.get(0));
-                        frbuf.write('|');
-                        encoded = enc.encode(flt.values[1]);
-                        tobuf.write(encoded.get(0));
-                        tobuf.write('|');
+                        encodeBetweenRange(frbuf, tobuf, flt, enc);
+                        cont = false;
                         break;
                     case Prefix:
-                        if (flt.values.length != 1) {
-                            throw new RuntimeException("Only one value allowed for PREFIX filter");
-                        }
-                        encoded = enc.encode(flt.values[0]);
-                        tobuf.write(encoded.get(0));
-                        frbuf.write(encoded.get(0));
-
-
+                        encodePrefixRange(frbuf, tobuf, flt, enc);
                         //we can't continue after a prefix
                         cont = false;
                         break;
                     case Near:
-                        if (flt.values.length != 2 || !(flt.values instanceof Double[])) {
-                            throw new RuntimeException("Near filter accepts two doubles only!");
-                        }
-                        encoded = enc.encode(flt.values);
-                        tobuf.write(encoded.get(0));
-                        tobuf.write('|');
-                        frbuf.write(encoded.get(0));
-                        frbuf.write('|');
+                        encodeNearRange(frbuf, tobuf, flt, enc);
                         break;
                         // TODO - implement those...
                     case Greater:
+                        encodeGreaterRange(frbuf, tobuf, flt, enc);
+                        lowerInclusive = false;
+                        cont = false;
+                        break;
                     case GreaterEquals:
+                        encodeGreaterRange(frbuf, tobuf, flt, enc);
+                        lowerInclusive = true;
+                        cont = false;
+                        break;
                     case Less:
+                        encodeLessRange(frbuf, tobuf, flt, enc);
+                        upperInclusive = false;
+                        cont = false;
+                        break;
                     case LessEqual:
+                        encodeLessRange(frbuf, tobuf, flt, enc);
+                        upperInclusive = true;
+                        cont = false;
+                        break;
                     case Radius:
 
                     default:
@@ -310,7 +297,110 @@ public class SimpleIndex implements Index {
             from = frbuf.toByteArray();
             to = tobuf.toByteArray();
 
+            from[0] = (byte) (lowerInclusive ? '[' : '(');
+            to[0] = (byte) (upperInclusive ? '[' : '(');
+
         }
+
+
+
+        private void encodeNearRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+            List<byte[]> encoded;
+            if (flt.values.length != 2 || !(flt.values instanceof Double[])) {
+                throw new RuntimeException("Near filter accepts two doubles only!");
+            }
+            encoded = enc.encode(flt.values);
+            tobuf.write(encoded.get(0));
+            tobuf.write('|');
+            frbuf.write(encoded.get(0));
+            frbuf.write('|');
+        }
+
+        private void encodePrefixRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+            List<byte[]> encoded;
+            if (flt.values.length != 1) {
+                throw new RuntimeException("Only one value allowed for PREFIX filter");
+            }
+            encoded = enc.encode(flt.values[0]);
+            tobuf.write(encoded.get(0));
+            frbuf.write(encoded.get(0));
+        }
+
+        private void encodeBetweenRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+            List<byte[]> encoded;
+            if (flt.values.length != 2) {
+                throw new RuntimeException("Exactly two value allowed for BETWEEN filter");
+            }
+            encoded = enc.encode(flt.values[0]);
+            frbuf.write(encoded.get(0));
+            frbuf.write('|');
+            encoded = enc.encode(flt.values[1]);
+            tobuf.write(encoded.get(0));
+            tobuf.write('|');
+        }
+
+        private void encodeEqualRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+            List<byte[]> encoded;
+            if (flt.values.length != 1) {
+                throw new RuntimeException("Only one value allowed for EQ filter");
+            }
+            encoded = enc.encode(flt.values[0]);
+            tobuf.write(encoded.get(0));
+            tobuf.write('|');
+            frbuf.write(encoded.get(0));
+            frbuf.write('|');
+            return;
+        }
+
+
+        /**
+         * Encode a lexical range for a GT filter. basically we encode the range as value - \xff\xff\xff\xff\xff
+         * @param frbuf
+         * @param tobuf
+         * @param flt
+         * @param enc
+         * @throws IOException
+         */
+        private void encodeGreaterRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+            List<byte[]> encoded;
+            if (flt.values.length != 1) {
+                throw new RuntimeException("Exactly one value allowed for GT filter");
+            }
+
+            encoded = enc.encode(flt.values[0]);
+            byte []bs = encoded.get(0);
+
+            frbuf.write(bs);
+            frbuf.write('|');
+            // write 0xff * the size of the encoded value
+            // TODO - do it properly for numeric types
+            for (int n = 0; n < bs.length; n++) {
+                bs[n] = (byte) 0xff;
+            }
+            tobuf.write(bs);
+            tobuf.write('|');
+        }
+
+        private void encodeLessRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+            List<byte[]> encoded;
+            if (flt.values.length != 1) {
+                throw new RuntimeException("Exactly one value allowed for GT filter");
+            }
+            encoded = enc.encode(flt.values[0]);
+            byte []bs = encoded.get(0);
+
+            tobuf.write(bs);
+            tobuf.write('|');
+
+
+            // write 0x00 * the size of the encoded value
+            for (int n = 0; n < bs.length; n++) {
+                bs[n] = (byte) 0x00;
+            }
+            frbuf.write(bs);
+            frbuf.write('|');
+        }
+
     }
 
 
