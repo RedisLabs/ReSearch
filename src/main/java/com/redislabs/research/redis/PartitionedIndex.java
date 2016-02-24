@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.*;
 import java.util.zip.CRC32;
 
@@ -22,7 +23,9 @@ public class PartitionedIndex implements Index {
     ExecutorService pool;
     int timeoutMilli;
 
-    public PartitionedIndex(String name, Spec spec, int numPartitions, int timeoutMilli, String ...redisURIs ) {
+    public PartitionedIndex(String name, Spec spec, int numPartitions, int timeoutMilli,
+                            int numThreads,
+                            String ...redisURIs ) {
 
         partitions = new Index[numPartitions];
         this.timeoutMilli = timeoutMilli;
@@ -31,7 +34,7 @@ public class PartitionedIndex implements Index {
             partitions[i] = new SimpleIndex(redisURIs[i % redisURIs.length], pname, spec);
         }
 
-        pool = Executors.newFixedThreadPool(numPartitions*2);
+        pool = Executors.newFixedThreadPool(numThreads);
 
 
     }
@@ -69,7 +72,7 @@ public class PartitionedIndex implements Index {
     public List<String> get(final Query q) throws IOException, InterruptedException {
 
         // this is the queue we use to aggregate the results
-        final ArrayBlockingQueue<List<String>> queue = new ArrayBlockingQueue<>(partitions.length);
+        final ConcurrentLinkedQueue<List<String>> queue = new ConcurrentLinkedQueue<>();
 
         // submit the sub tasks to the thread pool
         for (Index idx : partitions) {
@@ -79,7 +82,7 @@ public class PartitionedIndex implements Index {
                 public Void call() throws IOException, InterruptedException {
                     List<String> r = fidx.get(q);
 
-                    queue.put(r);
+                    queue.add(r);
                     return null;
                 }
             });
@@ -92,11 +95,12 @@ public class PartitionedIndex implements Index {
         int took = 0;
         while (ret.size() < q.sort.offset + q.sort.limit && took < partitions.length) {
 
-            List<String> res = queue.poll(timeoutMilli, TimeUnit.MILLISECONDS);
+            List<String> res = queue.poll();
             if (res != null) {
                 ret.addAll(res);
+                took++;
             }
-            took++;
+
 
         }
         return ret.subList(q.sort.offset, Math.min(q.sort.offset+q.sort.limit, ret.size()));

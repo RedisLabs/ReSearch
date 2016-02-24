@@ -16,6 +16,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -65,6 +66,7 @@ public class Main {
         String []redisHosts;
         int numPartitions;
         boolean loadData;
+        int numThreads;
 
 
 
@@ -75,6 +77,7 @@ public class Main {
             opts.addOption(new Option("f", "file", true, "input file to load"));
             opts.addOption(new Option("h", "help",  false, "print this message"));
             opts.addOption(new Option("p", "partitions",  true, "number of index partitions"));
+            opts.addOption(new Option("t", "threads",  true, "number of concurrent threads for benchmarks"));
 
             Option redisHosts = Option.builder("r")
                     .longOpt("redisHosts")
@@ -105,7 +108,7 @@ public class Main {
             this.fileName = cmd.getOptionValue("file");
             this.loadData = cmd.hasOption("load");
             this.numPartitions = Integer.parseInt(cmd.getOptionValue("partitions", "8"));
-
+            this.numThreads = Integer.parseInt(cmd.getOptionValue("threads", "8"));
 
             String[] hosts = cmd.getOptionValue("redisHosts", "localhost:6379").split(",");
             this.redisHosts = new String[hosts.length];
@@ -134,6 +137,8 @@ public class Main {
         String line = null;
         Gson gson = new Gson();
         int  i =0;
+        int CHUNK = 10000;
+        Document[] docs = new Document[CHUNK];
         while ((line = rd.readLine()) != null) {
 
             GeoJsonEntity ent = gson.fromJson(line, GeoJsonEntity.class);
@@ -143,14 +148,23 @@ public class Main {
             doc.set("city", ent.properties.city);
             doc.set("latlon", ent.geometry.coordinates);
 
-            idx.index(doc);
-            store.store(doc);
+            docs[i % CHUNK] = doc;
 
-            i++;
-            if (i % 10000 == 0) {
+
+            if (i % CHUNK == CHUNK - 1) {
+                idx.index(docs);
+                store.store(docs);
+
                 System.out.println(i);
             }
+            i++;
 
+        }
+
+        if (i % CHUNK != 0) {
+            docs = Arrays.copyOfRange(docs, 0, i % CHUNK);
+            idx.index(docs);
+            store.store(docs);
         }
 
 
@@ -158,12 +172,14 @@ public class Main {
 
     public static void benchmark(int numThreads, final int numTests, final Index idx) {
 
+        System.out.printf("Benchmarking %d times using %d threads\n", numTests, numThreads);
         final String[] prefixes = new String[]{"a", "b", "c", "ab", "ac", "ca", "do", "ma", "foo", "bar", "ax"};
 
         ExecutorService pool = Executors.newFixedThreadPool(numThreads);
 
         final AtomicInteger ctr = new AtomicInteger(0);
-        final long startTime = System.currentTimeMillis();
+        final AtomicLong startTime = new AtomicLong(System.currentTimeMillis());
+        final int CHUNK = 10000;
         for (int i =0; i < numThreads; i++) {
             
             pool.submit(new Callable<Void>() {
@@ -173,10 +189,10 @@ public class Main {
 
                         idx.get(new Query("locs_name").filterPrefix("name", prefixes[x%prefixes.length]));
                         int total = ctr.incrementAndGet();
-                        if (total % 10000 == 0) {
+                        if (total % CHUNK == 0) {
 
                             long now = System.currentTimeMillis();
-                            System.out.println((double)total/((double)(now-startTime)/1000F));
+                            System.out.println((double)CHUNK/((double)(now-startTime.getAndSet(now))/1000F));
 
                         }
                     }
@@ -185,6 +201,8 @@ public class Main {
             });
             
         }
+
+
 
     }
 
@@ -196,7 +214,9 @@ public class Main {
         Spec spec = new Spec(Spec.prefix("name", false));
 
 
-        PartitionedIndex pi = new PartitionedIndex("locs_name", spec, opts.numPartitions, 500,
+        PartitionedIndex pi = new PartitionedIndex("locs_name", spec, opts.numPartitions,
+                500,
+                opts.numPartitions*opts.numThreads,
                 opts.redisHosts);
         DocumentStore st = new JSONStore(opts.redisHosts[0]);
 
@@ -206,7 +226,7 @@ public class Main {
             loadData(opts.fileName, pi, st);
         }
 
-       benchmark(4, 1000000, pi);
+       benchmark(opts.numThreads, 1000000, pi);
 
         //pi.drop();
         //loadData(args[0], pi, st);
