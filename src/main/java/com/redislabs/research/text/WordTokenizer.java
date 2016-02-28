@@ -1,8 +1,7 @@
 package com.redislabs.research.text;
 
 
-import java.util.HashMap;
-import java.util.StringTokenizer;
+import java.util.*;
 
 /**
  * Created by dvirsky on 28/02/16.
@@ -10,12 +9,27 @@ import java.util.StringTokenizer;
 public class WordTokenizer implements Tokenizer {
 
     TextNormalizer normalizer;
-    public WordTokenizer(TextNormalizer nrml) {
+    private Set<String> stopwords;
+
+    final static private String[] DEFAULT_STOPWORDS = {
+            "a", "an", "and", "are", "as", "at", "be", "but", "by",
+            "for", "if", "in", "into", "is", "it",
+            "no", "not", "of", "on", "or", "such",
+            "that", "the", "their", "then", "there", "these",
+            "they", "this", "to", "was", "will", "with"
+    };
+
+    public WordTokenizer(TextNormalizer nrml, String[] stopwords) {
         normalizer = nrml;
+        this.stopwords = new HashSet<>(Arrays.asList(stopwords));
+
+    }
+    public WordTokenizer(TextNormalizer nrml) {
+        this(nrml, DEFAULT_STOPWORDS);
     }
 
     @Override
-    public Iterable<Token> tokenize(String text) {
+    public List<Token> tokenize(String text) {
         StringTokenizer tkn = new StringTokenizer(text, " \t\n\r\f\"\'.,!@#$%^&*()[]{}\\/<>-_|:;~");
 
         HashMap<String, Token> tokens = new HashMap<>();
@@ -23,6 +37,9 @@ public class WordTokenizer implements Tokenizer {
         while (tkn.hasMoreTokens()) {
 
             String s = normalizer.normalize(tkn.nextToken());
+            if (stopwords.contains(s)) {
+                continue;
+            }
 
             Token t = tokens.get(s);
             boolean isnew = false;
@@ -48,6 +65,6 @@ public class WordTokenizer implements Tokenizer {
             }
         }
 
-        return tokens.values();
+        return new ArrayList<>(tokens.values());
     }
 }

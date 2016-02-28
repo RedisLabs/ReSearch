@@ -15,7 +15,7 @@ public class WordTokenizerTest extends TestCase {
 
         String s = "Hello \"world\", I will miss? you... world? you are still here? Hello?";
 
-        WordTokenizer tknz = new WordTokenizer(new NaiveNormalizer());
+        WordTokenizer tknz = new WordTokenizer(new NaiveNormalizer(), new String[]{});
 
         Iterable<Token> tokens = tknz.tokenize(s);
 
