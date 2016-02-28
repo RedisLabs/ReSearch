@@ -15,11 +15,12 @@ import java.util.List;
  *
  * Text fields are tokenized and inserted in
  */
-public class FullTextFacetedIndex implements Index {
+public class FullTextFacetedIndex extends BaseIndex {
 
     private Tokenizer tokenizer;
 
-    public FullTextFacetedIndex(Spec spec, Tokenizer tokenizer) {
+    public FullTextFacetedIndex(String redisURI, String name, Spec spec, Tokenizer tokenizer) {
+        super(name, spec, redisURI);
         this.tokenizer = tokenizer;
     }
 
@@ -40,6 +41,9 @@ public class FullTextFacetedIndex implements Index {
 
     @Override
     public Boolean drop() {
-        return null;
+        return false;
     }
+
+
+
 }

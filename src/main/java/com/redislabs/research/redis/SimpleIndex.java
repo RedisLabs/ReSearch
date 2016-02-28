@@ -16,12 +16,8 @@ import java.util.*;
  * SimpleIndex is the basic, prefix or exact value index, withuot partitioning.
  * Partitioning is built by creating multiple instances of SimpleIndex for each partition
  */
-public class SimpleIndex implements Index {
+public class SimpleIndex extends BaseIndex {
 
-
-    Spec spec;
-    String name;
-    private JedisPool pool;
 
     // a map of type to encoder
     private Map<String, Encoder> encoders = new HashMap<>();
@@ -33,10 +29,8 @@ public class SimpleIndex implements Index {
      * @param spec index spec
      */
     public SimpleIndex(String redisURI, String name, Spec spec) {
+        super(name, spec, redisURI);
 
-        this.spec = spec;
-        this.name = name;
-        pool = new JedisPool(new JedisPoolConfig(), URI.create(redisURI));
         createEncoders(spec);
 
     }
