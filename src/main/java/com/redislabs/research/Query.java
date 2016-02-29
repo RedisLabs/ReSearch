@@ -181,6 +181,12 @@ public class Query {
         return this;
     }
 
+    public Query filterBetween(String property, Number min, Number max) {
+        filters.add(new Filter<>(property, Op.Between, min, max));
+        return this;
+    }
+
+
     /**
      * Create a GREATER THAN OR EQUAL filter
      * @param property the name of the property filtered by

@@ -16,21 +16,21 @@ import java.util.List;
  */
 public class FullTextFacetedIndexTest extends TestCase {
 
-    public void testIndexTokens() throws Exception {
-
-        String s = "Hello \"world\", I will miss? you... world? you are still here? Hello?";
-
-        WordTokenizer tknz = new WordTokenizer(new NaiveNormalizer());
-
-        FullTextFacetedIndex idx = new FullTextFacetedIndex("redis://localhost:6379", "test", null, new WordTokenizer(new NaiveNormalizer()));
-
-        idx.indexStringField("1", 0.2d, s, null);
-
-        List<String> res = idx.executeQuery("hello world");
-        assertTrue(res.contains("1"));
-        assertTrue(res.size()==1);
-
-    }
+//    public void testIndexTokens() throws Exception {
+//
+//        String s = "Hello \"world\", I will miss? you... world? you are still here? Hello?";
+//
+//        WordTokenizer tknz = new WordTokenizer(new NaiveNormalizer());
+//
+//        FullTextFacetedIndex idx = new FullTextFacetedIndex("redis://localhost:6379", "test", null, new WordTokenizer(new NaiveNormalizer()));
+//
+//        idx.indexStringField("1", 0.2d, s, null);
+//
+//        List<String> res = idx.executeQuery("hello world");
+//        assertTrue(res.contains("1"));
+//        assertTrue(res.size()==1);
+//
+//    }
 
     public void testIndex() {
 
@@ -63,6 +63,14 @@ public class FullTextFacetedIndexTest extends TestCase {
             ids = idx.get(q);
             assertTrue(ids.size() == 1);
             assertTrue(ids.contains("doc1"));
+
+            q = new Query("test").filterMatches("foo", "hello world")
+                    .filterBetween("bar", Math.PI, Math.PI+0.5);
+            ids = idx.get(q);
+            assertEquals(1, ids.size());
+            assertTrue(ids.contains("doc1"));
+
+
 
         } catch (Exception e) {
             e.printStackTrace();

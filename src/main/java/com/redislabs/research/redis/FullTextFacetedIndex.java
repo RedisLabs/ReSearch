@@ -1,25 +1,16 @@
 package com.redislabs.research.redis;
 
 import com.redislabs.research.Document;
-import com.redislabs.research.Index;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
 import com.redislabs.research.dep.Hashids;
-import com.redislabs.research.text.TextNormalizer;
 import com.redislabs.research.text.Token;
 import com.redislabs.research.text.Tokenizer;
-import com.sun.deploy.util.StringUtils;
-import com.sun.org.apache.xerces.internal.impl.dv.util.Base64;
-
-import com.sun.org.apache.xerces.internal.impl.xs.identity.Field;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.ZParams;
-import sun.security.provider.MD5;
 
 import java.io.IOException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.zip.CRC32;
 
@@ -30,11 +21,37 @@ import java.util.zip.CRC32;
  */
 public class FullTextFacetedIndex extends BaseIndex {
 
+
     private Tokenizer tokenizer;
+    final static String zrangeStore = "local tbl = redis.call('ZRANGEBYSCORE', KEYS[1], ARGV[1], ARGV[2], 'WITHSCORES'); " +
+            "for i,x in ipairs(tbl) do\n" +
+            " if i % 2 == 1 then do\n" +
+            " redis.call('ZADD', KEYS[2], tostring(tbl[i+1]), tbl[i])\n" +
+            "end\n" +
+            "end\n" +
+            "end;";
+
+    private String zrangeStoreSHA;
 
     public FullTextFacetedIndex(String redisURI, String name, Spec spec, Tokenizer tokenizer) {
         super(name, spec, redisURI);
         this.tokenizer = tokenizer;
+
+        initScripts();
+    }
+
+    private void initScripts() {
+        Jedis conn = null;
+        try{
+            conn = pool.getResource();
+
+            zrangeStoreSHA = conn.scriptLoad(zrangeStore);
+
+        } finally {
+            assert conn != null;
+            conn.close();
+        }
+
     }
 
     @Override
@@ -55,6 +72,7 @@ public class FullTextFacetedIndex extends BaseIndex {
                             }
                             break;
                         case Numeric:
+
                             Number num = (Number)doc.property(field.name);
                             if (num != null) {
                                 indexNumeric(field.name, doc.getId(), num, pipe);
@@ -105,33 +123,7 @@ public class FullTextFacetedIndex extends BaseIndex {
         return "k:"+name+ ":"+field;
     }
 
-    List<String> executeQuery(String query) {
 
-        List<Token> tokens = tokenizer.tokenize(query);
-
-        Step[] tsteps = new Step[tokens.size()];
-        for (int i =0 ; i < tokens.size(); i++) {
-            tsteps[i] = new TokenStep(tokens.get(i));
-        }
-        Step root = new IntersectStep(tsteps);
-
-        Jedis conn = pool.getResource();
-        Pipeline pipe = conn.pipelined();
-
-        String tmpKey = root.execute(pipe);
-
-        pipe.zrange(tmpKey, 0, 10);
-        List<Object> res = pipe.syncAndReturnAll();
-        conn.close();
-
-
-        Set<String> ids = (Set<String>) res.get(res.size()-1);
-
-        return new ArrayList<>(ids);
-
-
-
-    }
 
     void indexNumeric(String fieldName, String docId, Number value, Pipeline pipe) {
         Jedis conn = null;
@@ -198,6 +190,26 @@ public class FullTextFacetedIndex extends BaseIndex {
                         }
                         root.addChild(new IntersectStep((String)flt.values[0]));
                         break;
+                    case Numeric:
+                        Double min = null, max = null;
+                        switch (flt.op) {
+                            case Between:
+                                min = (Double) flt.values[0];
+                                max = (Double) flt.values[1];
+                                break;
+                            case Greater:
+                                min = (Double) flt.values[0];
+                                break;
+                            case Equals:
+                                min = (Double) flt.values[0];
+                                max = min;
+                                break;
+                            default:
+                                throw new RuntimeException("Unsupported numeric op!");
+
+                        }
+                        root = new RangeIntersectStep(flt.property, min,max, root);
+                        break;
 
                     default:
                         throw new RuntimeException("Unsupported field type: " + field.type.toString());
@@ -205,6 +217,7 @@ public class FullTextFacetedIndex extends BaseIndex {
 
                 }
             }
+            System.out.println(root.toString());
 
         }
 
@@ -214,7 +227,9 @@ public class FullTextFacetedIndex extends BaseIndex {
 
             String tmpKey = root.execute(pipe);
 
-            pipe.zrevrange(tmpKey, query.sort.offset, query.sort.offset+query.sort.limit);
+
+            pipe.zrevrange(tmpKey, query.sort.offset, query.sort.offset + query.sort.limit);
+
             List<Object> res = pipe.syncAndReturnAll();
             conn.close();
 
@@ -233,6 +248,21 @@ public class FullTextFacetedIndex extends BaseIndex {
         List<Step> children;
 
 
+        @Override
+        public String toString() {
+            return toString("");
+        }
+
+        public String toString(String tabs) {
+
+            String childrenstr = "";
+
+            for (Step c : children) {
+                childrenstr += c.toString(tabs + "  ") + ",\n";
+            }
+            return String.format("%s%s {\n%s%s}", tabs, getClass().getSimpleName(), childrenstr, tabs );
+        }
+
 
         public Step(Step ...children) {
             this.children = new LinkedList<>(Arrays.asList(children));
@@ -250,6 +280,7 @@ public class FullTextFacetedIndex extends BaseIndex {
 
         protected void addChild(Step child) {
             children.add(child);
+
         }
 
         abstract String execute(Pipeline pipe);
@@ -288,13 +319,54 @@ public class FullTextFacetedIndex extends BaseIndex {
         @Override
         String execute(Pipeline pipe) {
 
-            String[] tmpKeys = super.executeChildren(pipe);
+            String[] tmpKeys = executeChildren(pipe);
 
             String tk = makeTmpKey(tmpKeys);
             pipe.zinterstore(tk, new ZParams(), tmpKeys);
             pipe.expire(tk, 60);
             return tk;
         }
+    }
+
+    private class RangeIntersectStep extends Step {
+
+        private String fieldName;
+        private Double min;
+        private Double max;
+
+        public RangeIntersectStep(String fieldName, Double min, Double max, Step ...children) {
+            super(children);
+            this.fieldName = fieldName;
+            this.min = min;
+            this.max = max;
+        }
+
+
+
+        @Override
+        String execute(Pipeline pipe) {
+
+            String tk = fieldKey(fieldName);
+            if (!children.isEmpty()) {
+                String[] tmpKeys = executeChildren(pipe);
+
+                tk = makeTmpKey(tmpKeys);
+
+                pipe.zinterstore(tk, new ZParams().weightsByDouble(1, 0), fieldKey(fieldName), tmpKeys[0]);
+                pipe.expire(tk, 60);
+            }
+
+            String tk_ = tk + "_";
+            pipe.del(tk_);
+            pipe.evalsha(zrangeStoreSHA, Arrays.asList(tk, tk_), Arrays.asList(min != null ? min.toString() : "-inf",
+                            max != null ? max.toString() : "+inf"));
+            pipe.expire(tk_, 60);
+            return tk_;
+        }
+
+
+
+
     }
 
     private class UnionStep extends Step {
@@ -306,7 +378,7 @@ public class FullTextFacetedIndex extends BaseIndex {
         @Override
         String execute(Pipeline pipe) {
 
-            String[] tmpKeys = super.executeChildren(pipe);
+            String[] tmpKeys = executeChildren(pipe);
 
             String tk = makeTmpKey(tmpKeys);
             pipe.zunionstore(tk, new ZParams(), tmpKeys);
@@ -318,6 +390,10 @@ public class FullTextFacetedIndex extends BaseIndex {
     private class TokenStep extends Step {
         private final Token token;
 
+        @Override
+        public String toString(String tabs) {
+            return String.format("%sTokenStep('%s')", tabs, token.text);
+        }
         public TokenStep(Token tok) {
             super();
             this.token = tok;
