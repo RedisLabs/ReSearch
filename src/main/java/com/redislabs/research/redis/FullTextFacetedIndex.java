@@ -1,5 +1,6 @@
 package com.redislabs.research.redis;
 
+import ch.hsr.geohash.GeoHash;
 import com.redislabs.research.Document;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
@@ -123,6 +124,10 @@ public class FullTextFacetedIndex extends BaseIndex {
         return "k:"+name+ ":"+field;
     }
 
+    private String geoKey(String geoHash) {
+        return "g:"+name+ ":"+geoHash;
+    }
+
 
 
     void indexNumeric(String fieldName, String docId, Number value, Pipeline pipe) {
@@ -159,6 +164,14 @@ public class FullTextFacetedIndex extends BaseIndex {
             pipe.sync();
             conn.close();
         }
+    }
+
+    void indexGeoPoint(String docId, Double lat, Double lon, int precision, Pipeline pipe) {
+        GeoHash coarse = GeoHash.withCharacterPrecision(lat, lon, precision);
+        GeoHash fine = GeoHash.withBitPrecision(lat, lon, 53);
+
+        pipe.zadd(geoKey(coarse.toBase32()), fine.longValue(), docId);
+
     }
 
     private class QueryExecutionPlan {
