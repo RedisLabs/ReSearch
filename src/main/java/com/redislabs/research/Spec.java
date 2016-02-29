@@ -51,10 +51,27 @@ public class Spec {
         }
     }
 
+    public static Field geo(String name, int precision) {
+        return new GeoField(name, precision);
+    }
+
     public static Field numeric(String name) {
         return new Field(name, IndexingType.Numeric);
     }
 
+
+    public static class FulltextField extends Field {
+
+        public double weight;
+        public FulltextField(String name, double weight) {
+            super(name, IndexingType.FullText);
+            this.weight = weight;
+        }
+    }
+
+    public static Field fulltext(String name, double weight) {
+        return new FulltextField(name, weight);
+    }
 
 
     public List<Field> fields;

@@ -8,8 +8,6 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.Pipeline;
 
-import javax.print.Doc;
-import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,7 +39,7 @@ public class JSONStore implements DocumentStore {
             for (Document doc : docs) {
 
                 String encoded = gson.toJson(doc);
-                pipe.set(key(doc.id()), encoded);
+                pipe.set(key(doc.getId()), encoded);
 
             }
             pipe.sync();

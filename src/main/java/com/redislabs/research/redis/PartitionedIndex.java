@@ -8,9 +8,7 @@ import com.redislabs.research.Spec;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 import java.util.concurrent.*;
 import java.util.zip.CRC32;
 
@@ -55,7 +53,7 @@ public class PartitionedIndex implements Index {
         }
         // TODO: Make this transactional and pipelined
         for (Document doc : docs) {
-            parts[partitionFor(doc.id())].add(doc);
+            parts[partitionFor(doc.getId())].add(doc);
 
         }
 

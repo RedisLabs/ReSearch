@@ -22,6 +22,7 @@ public class Query {
         Between,
         Radius,
         Near,
+        Matches,
     }
 
     /**
@@ -207,6 +208,11 @@ public class Query {
      */
     public Query filterLessEqual(String property, Object value) {
         filters.add(new Filter<>(property, Op.LessEqual, value));
+        return this;
+    }
+
+    public Query filterMatches(String property, String query) {
+        filters.add(new Filter<>(property, Op.Matches, query));
         return this;
     }
 

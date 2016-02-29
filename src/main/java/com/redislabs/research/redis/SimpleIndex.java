@@ -1,7 +1,6 @@
 package com.redislabs.research.redis;
 import redis.clients.jedis.*;
 import com.redislabs.research.Document;
-import com.redislabs.research.Index;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
 import com.redislabs.research.text.NaiveNormalizer;
@@ -9,7 +8,6 @@ import com.redislabs.research.text.NaiveNormalizer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.URI;
 import java.util.*;
 
 /**
@@ -184,9 +182,9 @@ public class SimpleIndex extends BaseIndex {
                 buf.write('|');
 
             }
-            // append the id to the entry
+            // append the getId to the entry
             buf.write('|');
-            buf.write(doc.id().getBytes());
+            buf.write(doc.getId().getBytes());
             ret.add(buf.toByteArray());
         }
 

@@ -21,7 +21,7 @@ public interface DocumentStore {
     List<Document> load(String ...ids);
 
     /**
-     * Delete documents from the store by id
+     * Delete documents from the store by getId
      * @param ids
      * @return the number of documents actually deleted
      */

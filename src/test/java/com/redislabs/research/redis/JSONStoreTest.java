@@ -25,15 +25,15 @@ public class JSONStoreTest extends TestCase {
         List<Document> ldocs = s.load("doc1", "doc2", "doc3", "doc4");
 
         assertEquals(3, ldocs.size());
-        assertEquals("doc1", ldocs.get(0).id());
+        assertEquals("doc1", ldocs.get(0).getId());
         assertEquals("foo1", ldocs.get(0).property("foo"));
         assertEquals("bar1", ldocs.get(0).property("bar"));
 
-        assertEquals("doc2", ldocs.get(1).id());
+        assertEquals("doc2", ldocs.get(1).getId());
         assertEquals("foo2", ldocs.get(1).property("foo"));
         assertEquals("bar2", ldocs.get(1).property("bar"));
 
-        assertEquals("doc3", ldocs.get(2).id());
+        assertEquals("doc3", ldocs.get(2).getId());
         assertEquals("foo3", ldocs.get(2).property("foo"));
         assertEquals("bar3", ldocs.get(2).property("bar"));
 

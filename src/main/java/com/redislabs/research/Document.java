@@ -12,12 +12,22 @@ import java.util.Map;
 public class Document implements Serializable {
 
     private String id;
+    private double score;
     private Map<String, Object> properties;
+
+    public Document(String id, double score) {
+        this.id = id;
+        this.score = score;
+        properties = new HashMap<>();
+    }
 
     public Document(String id) {
         this.id = id;
+        this.score = 1.0;
         properties = new HashMap<>();
     }
+
+
 
     public Document set(String key, Object value) {
         properties.put(key, value);
@@ -33,12 +43,27 @@ public class Document implements Serializable {
         return properties.get(key);
     }
 
+
     /**
-     * Get the document's id
-     *
-     * @return
+     * @return the document's score
      */
-    public String id() {
+    public double getScore() {
+        return score;
+    }
+
+    /**
+     * Set the document's score
+     * @param score new score to set
+     * @return the document itself
+     */
+    public Document setScore(double score) {
+        this.score = score;
+        return this;
+    }
+    /**
+     * @return the document's id
+     */
+    public String getId() {
         return id;
     }
 
