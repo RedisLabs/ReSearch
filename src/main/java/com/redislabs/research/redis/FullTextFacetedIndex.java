@@ -1,6 +1,8 @@
 package com.redislabs.research.redis;
 
 import ch.hsr.geohash.GeoHash;
+import ch.hsr.geohash.WGS84Point;
+import ch.hsr.geohash.queries.GeoHashCircleQuery;
 import com.redislabs.research.Document;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
@@ -78,6 +80,14 @@ public class FullTextFacetedIndex extends BaseIndex {
                             if (num != null) {
                                 indexNumeric(field.name, doc.getId(), num, pipe);
                             }
+                            break;
+                        case Geo:
+                            Spec.GeoField gf = (Spec.GeoField)field;
+                            Double[] latlon = (Double[])doc.property(field.name);
+                            if (latlon.length != 2) {
+                                throw new RuntimeException("Invalid length for lat,lon pair");
+                            }
+                            indexGeoPoint(doc.getId(), latlon[0], latlon[1], gf.precision, pipe);
                             break;
                         default:
                             throw new RuntimeException("Unsuppported index spec type for " + field.name  + ": " + field.type.toString());
@@ -220,10 +230,20 @@ public class FullTextFacetedIndex extends BaseIndex {
                             default:
                                 throw new RuntimeException("Unsupported numeric op!");
 
+
                         }
+
                         root = new RangeIntersectStep(flt.property, min,max, root);
                         break;
-
+                    case Geo:
+                        if (flt.op != Query.Op.Radius) {
+                            throw new RuntimeException("Unsupported op for geo index: " + flt.op.toString());
+                        }
+                        double lat = (double)flt.values[0];
+                        double lon = (double)flt.values[1];
+                        double radius = (double)flt.values[2];
+                        root.addChild(new GeoRadiusStep(lat, lon, radius, ((Spec.GeoField)field).precision));
+                        break;
                     default:
                         throw new RuntimeException("Unsupported field type: " + field.type.toString());
 
@@ -298,7 +318,7 @@ public class FullTextFacetedIndex extends BaseIndex {
 
         abstract String execute(Pipeline pipe);
 
-        protected String makeTmpKey(String []subKeys) {
+        protected String makeTmpKey(String ...subKeys) {
 
             Hashids hids = new Hashids();
             if (subKeys.length == 0) {
@@ -419,5 +439,54 @@ public class FullTextFacetedIndex extends BaseIndex {
 
     }
 
+
+    private class GeoRadiusStep extends Step {
+
+        private final double lat;
+        private final double lon;
+        private final double radius;
+        private final int precision;
+
+
+        @Override
+        public String toString(String tabs) {
+            return String.format("%sGeoRadiusStep(%.03f,%.03f => %.02fm))", tabs, lat, lon, radius);
+        }
+        public GeoRadiusStep(double lat, double lon, double radius, int precision) {
+            super();
+            this.lat = lat;
+            this.lon = lon;
+            this.radius = radius;
+            this.precision = precision;
+        }
+
+
+        @Override
+        String execute(Pipeline pipe) {
+
+            GeoHashCircleQuery q = new GeoHashCircleQuery(new WGS84Point(lat, lon), radius);
+            List<GeoHash> hashes = q.getSearchHashes();
+            Set<String> hashKeys = new HashSet<>(hashes.size());
+            for (GeoHash h : hashes) {
+
+                String hk = GeoHash.withCharacterPrecision(
+                        h.getPoint().getLatitude(), h.getPoint().getLongitude(), precision)
+                        .toBase32();
+                hashKeys.add(geoKey(hk));
+            }
+
+            String[] keysArr = hashKeys.toArray(new String[hashKeys.size()]);
+            double[] scoresArr = new double[hashKeys.size()];//all weights are zero
+            String tmpKey = makeTmpKey(keysArr);
+
+            pipe.zunionstore(tmpKey, new ZParams().aggregate(ZParams.Aggregate.MAX)
+                    .weightsByDouble(scoresArr), keysArr);
+            return tmpKey;
+
+
+        }
+
+
+    }
 
 }

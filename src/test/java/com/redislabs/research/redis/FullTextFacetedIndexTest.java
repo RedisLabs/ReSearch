@@ -35,14 +35,19 @@ public class FullTextFacetedIndexTest extends TestCase {
     public void testIndex() {
 
 
-        Spec spec = new Spec(Spec.fulltext("foo", 1.0), Spec.numeric("bar"));
+        Spec spec = new Spec(Spec.fulltext("foo", 1.0), Spec.numeric("bar"),
+                        Spec.geo("location", Encoders.Geohash.PRECISION_1KM));
+
         FullTextFacetedIndex idx = new FullTextFacetedIndex("redis://localhost:6379", "test",
                 spec, new WordTokenizer(new NaiveNormalizer()));
 
         Document[] docs = {
-                new Document("doc1", 0.1).set("foo", "hello world").set("bar", Math.PI),
-                new Document("doc2", 0.2).set("foo", "hello werld").set("bar", Math.PI+1),
-                new Document("doc3", 0.3).set("foo", "jello world").set("bar", Math.PI-1),
+                new Document("doc1", 0.1).set("foo", "hello world").set("bar", Math.PI)
+                        .set("location",  new Double[]{40.7142700, -74.0059700}),
+                new Document("doc2", 0.2).set("foo", "hello werld").set("bar", Math.PI+1)
+                        .set("location",  new Double[]{40.7842700, -74.0159700}),
+                new Document("doc3", 0.3).set("foo", "jello world").set("bar", Math.PI-1)
+                        .set("location",  new Double[]{40.7242700, -74.0259700}),
         };
 
         try {
@@ -71,14 +76,17 @@ public class FullTextFacetedIndexTest extends TestCase {
             assertTrue(ids.contains("doc1"));
 
 
+            q = new Query("test").filterMatches("foo", "hello")
+                    .filterRadius("location", 40.7842700, -74.0159700, 900d);
+            ids = idx.get(q);
+            assertEquals(1, ids.size());
+            assertTrue(ids.contains("doc1"));
+
+
 
         } catch (Exception e) {
             e.printStackTrace();
             fail(e.getMessage());
         }
-
-
-
-
     }
 }

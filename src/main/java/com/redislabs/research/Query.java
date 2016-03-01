@@ -222,4 +222,9 @@ public class Query {
         return this;
     }
 
+    public Query filterRadius(String property, double lat, double lon, double radius) {
+        filters.add(new Filter<>(property, Op.Radius, lat, lon, radius));
+        return this;
+    }
+
 }
