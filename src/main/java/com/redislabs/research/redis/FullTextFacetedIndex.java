@@ -1,8 +1,10 @@
 package com.redislabs.research.redis;
 
+import ch.hsr.geohash.BoundingBox;
 import ch.hsr.geohash.GeoHash;
 import ch.hsr.geohash.WGS84Point;
 import ch.hsr.geohash.queries.GeoHashCircleQuery;
+import com.redislabs.luascript.LuaScript;
 import com.redislabs.research.Document;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
@@ -26,35 +28,18 @@ public class FullTextFacetedIndex extends BaseIndex {
 
 
     private Tokenizer tokenizer;
-    final static String zrangeStore = "local tbl = redis.call('ZRANGEBYSCORE', KEYS[1], ARGV[1], ARGV[2], 'WITHSCORES'); " +
-            "for i,x in ipairs(tbl) do\n" +
-            " if i % 2 == 1 then do\n" +
-            " redis.call('ZADD', KEYS[2], tostring(tbl[i+1]), tbl[i])\n" +
-            "end\n" +
-            "end\n" +
-            "end;";
 
-    private String zrangeStoreSHA;
+    private LuaScript zrangeByScoreStore;
 
-    public FullTextFacetedIndex(String redisURI, String name, Spec spec, Tokenizer tokenizer) {
+    public FullTextFacetedIndex(String redisURI, String name, Spec spec, Tokenizer tokenizer) throws IOException {
         super(name, spec, redisURI);
         this.tokenizer = tokenizer;
 
-        initScripts();
+        initScripts(redisURI);
     }
 
-    private void initScripts() {
-        Jedis conn = null;
-        try{
-            conn = pool.getResource();
-
-            zrangeStoreSHA = conn.scriptLoad(zrangeStore);
-
-        } finally {
-            assert conn != null;
-            conn.close();
-        }
-
+    private void initScripts(String redisURI) throws IOException {
+        zrangeByScoreStore = LuaScript.fromResource("lua/zrangebyscore_store.lua",redisURI);
     }
 
     @Override
@@ -250,7 +235,7 @@ public class FullTextFacetedIndex extends BaseIndex {
 
                 }
             }
-            System.out.println(root.toString());
+            //System.out.println(root.toString());
 
         }
 
@@ -391,8 +376,10 @@ public class FullTextFacetedIndex extends BaseIndex {
 
             String tk_ = tk + "_";
             pipe.del(tk_);
-            pipe.evalsha(zrangeStoreSHA, Arrays.asList(tk, tk_), Arrays.asList(min != null ? min.toString() : "-inf",
-                            max != null ? max.toString() : "+inf"));
+
+            zrangeByScoreStore.execute(pipe, 2, tk, tk_,
+                    min != null ? min.toString() : "-inf",
+                    max != null ? max.toString() : "+inf");
             pipe.expire(tk_, 60);
             return tk_;
         }
@@ -464,17 +451,12 @@ public class FullTextFacetedIndex extends BaseIndex {
         @Override
         String execute(Pipeline pipe) {
 
-            GeoHashCircleQuery q = new GeoHashCircleQuery(new WGS84Point(lat, lon), radius);
-            List<GeoHash> hashes = q.getSearchHashes();
-            Set<String> hashKeys = new HashSet<>(hashes.size());
-            for (GeoHash h : hashes) {
+            // Since the circle query doesn't have pre-defined precision, we need to calculate all the
+            // relevant geohashes in our precision manually
+            Set<String> hashKeys = getSearchHashes();
 
-                String hk = GeoHash.withCharacterPrecision(
-                        h.getPoint().getLatitude(), h.getPoint().getLongitude(), precision)
-                        .toBase32();
-                hashKeys.add(geoKey(hk));
-            }
 
+            // now let's union them
             String[] keysArr = hashKeys.toArray(new String[hashKeys.size()]);
             double[] scoresArr = new double[hashKeys.size()];//all weights are zero
             String tmpKey = makeTmpKey(keysArr);
@@ -484,6 +466,38 @@ public class FullTextFacetedIndex extends BaseIndex {
             return tmpKey;
 
 
+        }
+
+        /**
+         * Calculate the geo hash cells we need to query in order to cover all points within this query
+         * @return
+         */
+        private Set<String> getSearchHashes() {
+            GeoHashCircleQuery q = new GeoHashCircleQuery(new WGS84Point(lat, lon), radius);
+
+            // Since the circle query doesn't have pre-defined precision, we need to calculate all the
+            // relevant geohashes in our precision manually
+            GeoHash center = GeoHash.withCharacterPrecision(lat, lon, precision);
+
+            Set<String> hashKeys = new HashSet<>(8);
+            Set<GeoHash> seen = new HashSet<>(8);
+            Queue<GeoHash> candidates = new LinkedList<>();
+
+            candidates.add(center);
+
+            while (!candidates.isEmpty()) {
+                GeoHash gh = candidates.remove();
+                hashKeys.add(geoKey(gh.toBase32()));
+
+                GeoHash[] neighbors = gh.getAdjacent();
+                for (GeoHash neighbor : neighbors) {
+                    if (seen.add(neighbor) && q.contains(neighbor)) {
+                            candidates.add(neighbor);
+                        }
+                    }
+
+            }
+            return hashKeys;
         }
 
 
