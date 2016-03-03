@@ -127,7 +127,7 @@ public class Main {
     }
 
 
-    static void loadData(String fileName, Index idx, DocumentStore store) throws IOException {
+    static void loadData(String fileName,Engine engine) throws IOException {
 
 
         Path path = FileSystems.getDefault().getPath("", fileName);
@@ -152,9 +152,7 @@ public class Main {
 
 
             if (i % CHUNK == CHUNK - 1) {
-                idx.index(docs);
-                store.store(docs);
-
+                engine.put(docs);
                 System.out.println(i);
             }
             i++;
@@ -163,14 +161,13 @@ public class Main {
 
         if (i % CHUNK != 0) {
             docs = Arrays.copyOfRange(docs, 0, i % CHUNK);
-            idx.index(docs);
-            store.store(docs);
+            engine.put(docs);
         }
 
 
     }
 
-    public static void benchmark(int numThreads, final int numTests, final Index idx) {
+    public static void benchmark(int numThreads, final int numTests, final Engine engine) {
 
         System.out.printf("Benchmarking %d times using %d threads\n", numTests, numThreads);
         final String[] prefixes = new String[]{"a", "b", "c", "ab", "ac", "ca", "do", "ma", "foo", "bar", "ax"};
@@ -187,7 +184,7 @@ public class Main {
                 public Void call() throws Exception {
                     for (int x =0; x < numTests; x++) {
 
-                        idx.get(new Query("locs_name").filterPrefix("name", prefixes[x%prefixes.length]));
+                        engine.search(new Query("locs_name").filterPrefix("name", prefixes[x%prefixes.length]));
                         int total = ctr.incrementAndGet();
                         if (total % CHUNK == 0) {
 
@@ -220,13 +217,15 @@ public class Main {
                 opts.redisHosts);
         DocumentStore st = new JSONStore(opts.redisHosts[0]);
 
+        Engine engine = new Engine(st, pi);
+
         if (opts.loadData && !opts.fileName.isEmpty()) {
             System.out.println("Loading data from " + opts.fileName);
             pi.drop();
-            loadData(opts.fileName, pi, st);
+            loadData(opts.fileName, engine);
         }
 
-       benchmark(opts.numThreads, 1000000, pi);
+       benchmark(opts.numThreads, 1000000, engine);
 
         //pi.drop();
         //loadData(args[0], pi, st);

@@ -13,4 +13,5 @@ public interface Index {
     List<String> get(Query q) throws IOException, InterruptedException;
     Boolean delete(String... ids);
     Boolean drop();
+    String id();
 }

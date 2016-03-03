@@ -20,4 +20,9 @@ public abstract class BaseIndex implements Index {
         this.spec = spec;
         pool = new JedisPool(new JedisPoolConfig(), URI.create(redisURI));
     }
+
+    @Override
+    public String id() {
+        return name;
+    }
 }

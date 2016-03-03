@@ -20,11 +20,12 @@ public class PartitionedIndex implements Index {
     Index[] partitions;
     ExecutorService pool;
     int timeoutMilli;
+    String name;
 
     public PartitionedIndex(String name, Spec spec, int numPartitions, int timeoutMilli,
                             int numThreads,
                             String ...redisURIs ) {
-
+        this.name = name;
         partitions = new Index[numPartitions];
         this.timeoutMilli = timeoutMilli;
         for (int i =0; i < numPartitions; i++) {
@@ -124,5 +125,10 @@ public class PartitionedIndex implements Index {
 
         return true;
 
+    }
+
+    @Override
+    public String id() {
+        return name;
     }
 }

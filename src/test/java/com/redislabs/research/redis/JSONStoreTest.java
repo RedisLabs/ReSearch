@@ -3,6 +3,7 @@ package com.redislabs.research.redis;
 import com.redislabs.research.Document;
 import junit.framework.TestCase;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -22,7 +23,7 @@ public class JSONStoreTest extends TestCase {
 
         s.store(docs);
 
-        List<Document> ldocs = s.load("doc1", "doc2", "doc3", "doc4");
+        List<Document> ldocs = s.load(Arrays.asList("doc1", "doc2", "doc3", "doc4"));
 
         assertEquals(3, ldocs.size());
         assertEquals("doc1", ldocs.get(0).getId());
@@ -40,7 +41,7 @@ public class JSONStoreTest extends TestCase {
 
         int rc = s.delete("doc1", "doc2", "doc3", "doc4");
         assertEquals(3, rc);
-        ldocs = s.load("doc1", "doc2", "doc3", "doc4");
+        ldocs = s.load(Arrays.asList("doc1", "doc2", "doc3", "doc4"));
         assertEquals(0, ldocs.size());
     }
 }

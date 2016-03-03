@@ -18,7 +18,7 @@ public interface DocumentStore {
      * @param ids the ids of the docs to load
      * @return the documents found in the store
      */
-    List<Document> load(String ...ids);
+    List<Document> load(List<String> ids);
 
     /**
      * Delete documents from the store by getId

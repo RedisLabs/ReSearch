@@ -54,12 +54,12 @@ public class JSONStore implements DocumentStore {
      * @return a list of documents loaded
      */
     @Override
-    public List<Document> load(String... ids) {
+    public List<Document> load(List<String> ids) {
 
         Jedis conn = pool.getResource();
         List<Document> ret;
 
-        String[] keys = new String[ids.length];
+        String[] keys = new String[ids.size()];
         int i = 0;
         for (String id : ids) {
             keys[i] = key(id);
