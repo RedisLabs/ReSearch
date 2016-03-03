@@ -16,7 +16,7 @@ public class PartitionedIndexTest extends TestCase {
     public void testPartitionFor() throws Exception {
         Spec spec = new Spec(Spec.prefix("foo", false));
 
-        PartitionedIndex pi = new PartitionedIndex("foo", spec, 3, 500, 3,  "redis://localhost:6379");
+        PartitionedIndex pi = PartitionedIndex.newSimple("foo", spec, 3, 500, 3,  "redis://localhost:6379");
         assertEquals(3, pi.partitions.length);
 
         assertEquals(2, pi.partitionFor("foo"));
@@ -27,7 +27,7 @@ public class PartitionedIndexTest extends TestCase {
     public void testIndex() throws Exception {
 
         Spec spec = new Spec(Spec.prefix("foo", true));
-        PartitionedIndex pi = new PartitionedIndex("foo", spec, 3, 500, 3, "redis://localhost:6379");
+        PartitionedIndex pi = PartitionedIndex.newSimple("foo", spec, 3, 500, 3, "redis://localhost:6379");
         Document[] docs = new Document[] {
                 new Document("doc1").set("foo", "hello world").set("bar", Math.PI),
                 new Document("doc2").set("foo", "hello werld").set("bar", Math.PI+1),

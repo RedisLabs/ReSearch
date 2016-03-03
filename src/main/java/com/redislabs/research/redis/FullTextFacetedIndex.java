@@ -6,11 +6,14 @@ import ch.hsr.geohash.WGS84Point;
 import ch.hsr.geohash.queries.GeoHashCircleQuery;
 import com.redislabs.luascript.LuaScript;
 import com.redislabs.research.Document;
+import com.redislabs.research.Index;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
 import com.redislabs.research.dep.Hashids;
+import com.redislabs.research.text.NaiveNormalizer;
 import com.redislabs.research.text.Token;
 import com.redislabs.research.text.Tokenizer;
+import com.redislabs.research.text.WordTokenizer;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.ZParams;
@@ -25,6 +28,27 @@ import java.util.zip.CRC32;
  * Text fields are tokenized and inserted in
  */
 public class FullTextFacetedIndex extends BaseIndex {
+
+
+    public static class Factory implements IndexFactory {
+
+        private Tokenizer tokenizer;
+        public Factory(Tokenizer tokenizer) {
+            this.tokenizer = tokenizer;
+        }
+
+        /**
+         * Constructor with defaults
+         */
+        public Factory() {
+            this(new WordTokenizer(new NaiveNormalizer()));
+        }
+
+        @Override
+        public Index create(String name, Spec spec, String redisURI) throws IOException {
+            return new FullTextFacetedIndex(redisURI, name, spec, tokenizer);
+        }
+    }
 
 
     private Tokenizer tokenizer;

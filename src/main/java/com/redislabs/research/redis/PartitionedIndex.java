@@ -22,15 +22,28 @@ public class PartitionedIndex implements Index {
     int timeoutMilli;
     String name;
 
-    public PartitionedIndex(String name, Spec spec, int numPartitions, int timeoutMilli,
+    public static PartitionedIndex newSimple(String name, Spec spec, int numPartitions, int timeoutMilli,
+                          int numThreads,
+                          String ...redisURIs) throws IOException {
+        return new PartitionedIndex(new SimpleIndex.Factory(), name,spec,numPartitions,timeoutMilli,numThreads,redisURIs);
+    }
+
+    public static PartitionedIndex newFulltext(String name, Spec spec, int numPartitions, int timeoutMilli,
+                                             int numThreads,
+                                             String ...redisURIs) throws IOException {
+        return new PartitionedIndex(new FullTextFacetedIndex.Factory(), name,spec,numPartitions,timeoutMilli,numThreads,redisURIs);
+    }
+
+
+    public PartitionedIndex(IndexFactory factory, String name, Spec spec, int numPartitions, int timeoutMilli,
                             int numThreads,
-                            String ...redisURIs ) {
+                            String ...redisURIs ) throws IOException {
         this.name = name;
         partitions = new Index[numPartitions];
         this.timeoutMilli = timeoutMilli;
         for (int i =0; i < numPartitions; i++) {
             String pname = String.format("%s{%d}", name, i);
-            partitions[i] = new SimpleIndex(redisURIs[i % redisURIs.length], pname, spec);
+            partitions[i] = factory.create(pname, spec, redisURIs[i % redisURIs.length]);
         }
 
         pool = Executors.newFixedThreadPool(numThreads);

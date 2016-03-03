@@ -1,4 +1,5 @@
 package com.redislabs.research.redis;
+import com.redislabs.research.Index;
 import redis.clients.jedis.*;
 import com.redislabs.research.Document;
 import com.redislabs.research.Query;
@@ -16,6 +17,12 @@ import java.util.*;
  */
 public class SimpleIndex extends BaseIndex {
 
+    public static class Factory implements IndexFactory {
+        @Override
+        public Index create(String name, Spec spec, String redisURI) {
+            return new SimpleIndex(redisURI, name, spec);
+        }
+    }
 
     // a map of type to encoder
     private Map<String, Encoder> encoders = new HashMap<>();

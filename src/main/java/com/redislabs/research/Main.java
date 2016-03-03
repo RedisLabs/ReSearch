@@ -3,6 +3,7 @@ package com.redislabs.research;
 import com.google.gson.Gson;
 import com.redislabs.research.redis.JSONStore;
 import com.redislabs.research.redis.PartitionedIndex;
+import com.redislabs.research.redis.SimpleIndex;
 import org.apache.commons.cli.*;
 
 import java.io.BufferedReader;
@@ -211,7 +212,7 @@ public class Main {
         Spec spec = new Spec(Spec.prefix("name", false));
 
 
-        PartitionedIndex pi = new PartitionedIndex("locs_name", spec, opts.numPartitions,
+        PartitionedIndex pi = new PartitionedIndex(new SimpleIndex.Factory(), "locs_name", spec, opts.numPartitions,
                 500,
                 opts.numPartitions*opts.numThreads,
                 opts.redisHosts);
