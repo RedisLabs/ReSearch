@@ -99,7 +99,7 @@ public class SimpleIndex extends BaseIndex {
 
     }
 
-    private Entry extractEntry(byte[] raw) {
+    Entry extractEntry(byte[] raw) {
 
 
         int idx = -1;

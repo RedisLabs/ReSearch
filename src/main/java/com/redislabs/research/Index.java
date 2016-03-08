@@ -10,7 +10,7 @@ import java.util.List;
  */
 public interface Index {
 
-    public class Entry {
+    public class Entry implements Comparable<Entry> {
         public String id;
         public double score;
         public Entry(String id, double score) {
@@ -20,6 +20,12 @@ public interface Index {
         @Override
         public boolean equals(Object other) {
             return other instanceof Entry && ((Entry) other).id.equals(id);
+        }
+
+
+        @Override
+        public int compareTo(Entry o) {
+            return this.score == o.score ? 0 : (score < o.score ? -1 : 1);
         }
     }
 

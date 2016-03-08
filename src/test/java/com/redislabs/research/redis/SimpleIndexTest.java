@@ -21,15 +21,20 @@ public class SimpleIndexTest extends TestCase {
 
     public void testEncode() throws Exception {
 
-        Document doc = new Document("123").set("foo", "hello world").set("bar", 123);
+        Document doc = new Document("123").setScore(0.512).set("foo", "hello world").set("bar", 123);
 
         Spec spec = new Spec(Spec.prefix("foo",false), Spec.numeric("bar"));
 
         SimpleIndex idx = new SimpleIndex("redis://localhost:6379", "myindex", spec);
         List<byte[]> entries = idx.encode(doc);
-        for (byte[] entry : entries) {
-            System.out.println(HexBin.encode(entry).toString());
-        }
+        assertEquals(1, entries.size());
+
+        Index.Entry ent = idx.extractEntry(entries.get(0));
+        assertEquals(doc.getId(), ent.id);
+        assertEquals(doc.getScore(), ent.score);
+
+
+
     }
 
     public void testIndex() {

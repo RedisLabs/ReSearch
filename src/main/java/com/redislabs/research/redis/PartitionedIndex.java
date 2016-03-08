@@ -4,13 +4,11 @@ import com.redislabs.research.Document;
 import com.redislabs.research.Index;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
+import com.sun.deploy.util.ArrayUtil;
 
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.PriorityQueue;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.zip.CRC32;
 
@@ -105,13 +103,7 @@ public class PartitionedIndex implements Index {
 
 
         // collect the results
-        PriorityQueue<Entry> entries = new PriorityQueue<Entry>(q.sort.limit, new Comparator<Entry>(){
-
-            @Override
-            public int compare(Entry e1, Entry e2) {
-                return e1.score == e2.score ? 0 : (e1.score > e2.score ? -1 : 1);
-            }
-        });
+        PriorityQueue<Entry> entries = new PriorityQueue<>(q.sort.limit);
 
         int took = 0;
         while (took < partitions.length) {
@@ -119,15 +111,21 @@ public class PartitionedIndex implements Index {
             List<Entry> res = queue.poll(timeoutMilli, TimeUnit.MILLISECONDS);
             if (res != null) {
                 entries.addAll(res);
+                while (entries.size() > q.sort.limit) {
+                    entries.poll();
+                }
                 took++;
             }
 
         }
 
         List<Entry> ret = new ArrayList<>(entries.size());
+
         while (entries.size() > 0) {
             ret.add(entries.poll());
         }
+        Collections.reverse(ret);
+
         return ret;
 
 
