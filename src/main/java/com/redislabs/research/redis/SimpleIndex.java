@@ -99,6 +99,12 @@ public class SimpleIndex extends BaseIndex {
 
     }
 
+    /**
+     * Takes the raw encoded query from the sorted set and extracts id and score by decoding it.
+     * e.g. "world||?\xf0\x00\x00\x00\x00\x00\x00|doc1" --> Entry(id: doc1, score: 1.0)
+     * @param raw the raw entry in the sorted set
+     * @return a new Entry object
+     */
     Entry extractEntry(byte[] raw) {
 
 
