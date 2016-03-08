@@ -1,6 +1,7 @@
 package com.redislabs.research.redis;
 
 import com.redislabs.research.Document;
+import com.redislabs.research.Index;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
 import junit.framework.TestCase;
@@ -29,26 +30,26 @@ public class PartitionedIndexTest extends TestCase {
         Spec spec = new Spec(Spec.prefix("foo", true));
         PartitionedIndex pi = PartitionedIndex.newSimple("foo", spec, 3, 500, 3, "redis://localhost:6379");
         Document[] docs = new Document[] {
-                new Document("doc1").set("foo", "hello world").set("bar", Math.PI),
-                new Document("doc2").set("foo", "hello werld").set("bar", Math.PI+1),
-                new Document("doc3").set("foo", "jello world").set("bar", Math.PI-1),
+                new Document("doc1").setScore(1.0).set("foo", "hello world").set("bar", Math.PI),
+                new Document("doc2").setScore(3.0).set("foo", "hello werld").set("bar", Math.PI+1),
+                new Document("doc3").setScore(2.0).set("foo", "jello world").set("bar", Math.PI-1),
         };
 
         pi.index(docs);
 
 
         try {
-            List<String> ids = pi.get(new Query("myindex").filterPrefix("foo", "hell"));
+            List<Index.Entry> ids = pi.get(new Query("myindex").filterPrefix("foo", "hell"));
 
-            assertTrue(ids.contains("doc1"));
-            assertTrue(ids.contains("doc2"));
-            assertFalse(ids.contains("doc3"));
+            assertTrue(ids.contains(new Index.Entry("doc1",0)));
+            assertTrue(ids.contains(new Index.Entry("doc2",0)));
+            assertFalse(ids.contains(new Index.Entry("doc3",0)));
 
             ids = pi.get(new Query("myindex").filterPrefix("foo", "world"));
 
-            assertTrue(ids.contains("doc1"));
-            assertFalse(ids.contains("doc2"));
-            assertTrue(ids.contains("doc3"));
+            assertTrue(ids.contains(new Index.Entry("doc1",0)));
+            assertFalse(ids.contains(new Index.Entry("doc2",0)));
+            assertTrue(ids.contains(new Index.Entry("doc3",0)));
 
         } catch (IOException e) {
             e.printStackTrace();

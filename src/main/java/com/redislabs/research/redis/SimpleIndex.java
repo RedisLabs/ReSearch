@@ -9,6 +9,8 @@ import com.redislabs.research.text.NaiveNormalizer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.*;
 
 /**
@@ -27,6 +29,7 @@ public class SimpleIndex extends BaseIndex {
     // a map of type to encoder
     private Map<String, Encoder> encoders = new HashMap<>();
 
+    private Encoder<Number> scoreEncoder = new Encoders.Numeric();
     /**
      * Constructor
      * @param redisURI the redis server we connect to
@@ -84,7 +87,7 @@ public class SimpleIndex extends BaseIndex {
             }
 
             for (byte[] entry : entries) {
-                pipe.zadd(name, 0, new String(entry));
+                pipe.zadd(name.getBytes(), 0, entry);
             }
 
         }
@@ -96,6 +99,39 @@ public class SimpleIndex extends BaseIndex {
 
     }
 
+    private Entry extractEntry(byte[] raw) {
+
+
+        int idx = -1;
+        int idIdx = -1;
+        for (int i = 1; i < raw.length; i++) {
+            if (raw[i] == '|' && raw[i-1] == '|') {
+                idx = i + 1;
+                break;
+            }
+        }
+        if (idx == -1) {
+            throw new RuntimeException("Invalid id entry: " + new String(raw));
+        }
+        for (int i = idx; i < raw.length; i++) {
+            if (raw[i] == '|') {
+                idIdx = i+1;
+                break;
+            }
+        }
+        if (idIdx == -1) {
+            throw new RuntimeException("Invalid id entry: " + new String(raw));
+        }
+
+
+        String id = new String(Arrays.copyOfRange(raw, idIdx, raw.length));
+        ByteBuffer bb = ByteBuffer.wrap(raw, idx, idIdx - idx -1);
+        bb.order(ByteOrder.BIG_ENDIAN);
+        double score = Double.longBitsToDouble(bb.getLong());
+
+        return new Entry(id, 1d/score);
+
+    }
     /**
      * Get ids of documents indexed in the index
      * @param q the query to look for
@@ -103,7 +139,7 @@ public class SimpleIndex extends BaseIndex {
      * @throws IOException
      */
     @Override
-    public List<String> get(Query q) throws IOException {
+    public List<Index.Entry> get(Query q) throws IOException {
 
         // Get the redis ranges to look for
         Range rng = new Range(q);
@@ -118,10 +154,10 @@ public class SimpleIndex extends BaseIndex {
         }
 
         // extract the ids from the entries
-        List<String>ids = new ArrayList<>(entries.size());
+        List<Entry>ids = new ArrayList<>(entries.size());
         for (byte[] entry : entries) {
-            String se = new String(entry);
-            ids.add(se.substring(se.lastIndexOf("||") + 2));
+            //String se = new String(entry);
+            ids.add(extractEntry(entry));
         }
 
         conn.close();
@@ -191,7 +227,13 @@ public class SimpleIndex extends BaseIndex {
             }
             // append the getId to the entry
             buf.write('|');
+            buf.write(scoreEncoder.encode(1d/doc.getScore()).get(0));
+            buf.write('|');
             buf.write(doc.getId().getBytes());
+            //append the document score
+
+
+
             ret.add(buf.toByteArray());
         }
 

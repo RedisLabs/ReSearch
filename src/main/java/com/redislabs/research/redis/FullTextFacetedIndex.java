@@ -16,6 +16,7 @@ import com.redislabs.research.text.Tokenizer;
 import com.redislabs.research.text.WordTokenizer;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
+import redis.clients.jedis.Tuple;
 import redis.clients.jedis.ZParams;
 
 import java.io.IOException;
@@ -118,7 +119,7 @@ public class FullTextFacetedIndex extends BaseIndex {
     }
 
     @Override
-    public List<String> get(Query q) throws IOException, InterruptedException {
+    public List<Index.Entry> get(Query q) throws IOException, InterruptedException {
 
         QueryExecutionPlan qxp = new QueryExecutionPlan(q);
 
@@ -263,22 +264,27 @@ public class FullTextFacetedIndex extends BaseIndex {
 
         }
 
-        public List<String> execute() {
+        public List<Entry> execute() {
             Jedis conn = pool.getResource();
             Pipeline pipe = conn.pipelined();
 
             String tmpKey = root.execute(pipe);
 
 
-            pipe.zrevrange(tmpKey, query.sort.offset, query.sort.offset + query.sort.limit);
+
+
+            pipe.zrevrangeWithScores(tmpKey, query.sort.offset, query.sort.offset + query.sort.limit);
 
             List<Object> res = pipe.syncAndReturnAll();
             conn.close();
 
 
-            Set<String> ids = (Set<String>) res.get(res.size()-1);
-
-            return new ArrayList<>(ids);
+            Set<Tuple> ids = (Set<Tuple>) res.get(res.size()-1);
+            List<Entry> entries = new ArrayList<>(ids.size());
+            for (Tuple t : ids) {
+                entries.add(new Entry(t.getElement(), t.getScore()));
+            }
+            return entries;
         }
 
 

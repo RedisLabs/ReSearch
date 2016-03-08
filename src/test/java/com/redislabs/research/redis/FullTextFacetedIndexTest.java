@@ -1,6 +1,7 @@
 package com.redislabs.research.redis;
 
 import com.redislabs.research.Document;
+import com.redislabs.research.Index;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
 import com.redislabs.research.text.NaiveNormalizer;
@@ -64,22 +65,22 @@ public class FullTextFacetedIndexTest extends TestCase {
 
         Query q = new Query("test").filterMatches("foo", "hello");
         try {
-            List<String> ids = idx.get(q);
+            List<Index.Entry> ids = idx.get(q);
             assertTrue(ids.size() == 2);
-            assertTrue(ids.contains("doc1"));
-            assertTrue(ids.contains("doc2"));
-            assertTrue(ids.get(0).equals("doc2")); //doc2 has higher score
+            assertTrue(ids.contains(new Index.Entry("doc1",0)));
+            assertTrue(ids.contains(new Index.Entry("doc2",0)));
+            assertTrue(ids.get(0).id.equals("doc2")); //doc2 has higher score
 
             q = new Query("test").filterMatches("foo", "HELLO? world");
             ids = idx.get(q);
             assertTrue(ids.size() == 1);
-            assertTrue(ids.contains("doc1"));
+            assertTrue(ids.contains(new Index.Entry("doc1",0)));
 
             q = new Query("test").filterMatches("foo", "hello world")
                     .filterBetween("bar", Math.PI, Math.PI+0.5);
             ids = idx.get(q);
             assertEquals(1, ids.size());
-            assertTrue(ids.contains("doc1"));
+            assertTrue(ids.contains(new Index.Entry("doc1",0)));
 
 
 
@@ -96,8 +97,8 @@ public class FullTextFacetedIndexTest extends TestCase {
             }
 
             assertEquals(2, ids.size());
-            assertTrue(ids.contains("doc1"));
-            assertTrue(ids.contains("doc2"));
+            assertTrue(ids.contains(new Index.Entry("doc1",0)));
+            assertTrue(ids.contains(new Index.Entry("doc1",0)));
 
 
 

@@ -30,9 +30,9 @@ public class Encoders {
             buf.order(ByteOrder.BIG_ENDIAN);
             if (num instanceof Double) {
                 // TODO - this is wrong for negatives, fix this
-                buf.putDouble((Double) num);
+                buf.putLong(Double.doubleToRawLongBits((Double) num));
             } else if (num instanceof Float) {
-                buf.putDouble((double) (float) num);
+                buf.putLong(Double.doubleToRawLongBits(new Double((Float)num)));
             } else if (num instanceof Integer) {
                 buf.putLong(num.longValue());
             } else if (num instanceof Long) {

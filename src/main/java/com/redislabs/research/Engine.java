@@ -4,6 +4,7 @@ import com.redislabs.research.errors.SearchException;
 import redis.clients.jedis.exceptions.JedisAskDataException;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,16 +47,24 @@ public class Engine {
         }
 
         List<String>docIds;
+        List<Index.Entry> entries;
         try {
-            docIds = idx.get(query);
+            entries = idx.get(query);
         } catch (Exception e) {
             e.printStackTrace();
             throw new SearchException(e);
         }
 
+
+
         List<Document> result = null;
-        if (docIds == null || docIds.isEmpty()) {
+        if (entries == null || entries.isEmpty()) {
             return null;
+        }
+
+        docIds = new ArrayList<>(entries.size());
+        for (Index.Entry e : entries) {
+            docIds.add(e.id);
         }
 
         try {

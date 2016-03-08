@@ -1,12 +1,16 @@
 package com.redislabs.research.redis;
 
 import com.redislabs.research.Document;
+import com.redislabs.research.Index;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
+
 import com.sun.org.apache.xerces.internal.impl.dv.util.HexBin;
 import junit.framework.TestCase;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,14 +35,26 @@ public class SimpleIndexTest extends TestCase {
     public void testIndex() {
 
 
+        double x = 1;
+        long bits = Double.doubleToRawLongBits(x);
+        ByteBuffer bb = ByteBuffer.allocate(8);
+        bb.order(ByteOrder.BIG_ENDIAN);
+        bb.putLong(bits);
+
+        ByteBuffer bb8 = ByteBuffer.wrap(bb.array());
+        bb8.order(ByteOrder.BIG_ENDIAN);
+        bits = bb8.getLong();
+        x = Double.longBitsToDouble(bits);
+
+
         Spec spec = new Spec(Spec.prefix("foo", false));
 
         SimpleIndex idx = new SimpleIndex("redis://localhost:6379", "myindex", spec);
 
         Document[] docs = {
-                new Document("doc1").set("foo", "hello world").set("bar", Math.PI),
-                new Document("doc2").set("foo", "hello werld").set("bar", Math.PI+1),
-                new Document("doc3").set("foo", "jello world").set("bar", Math.PI-1),
+                new Document("doc1").setScore(1.0).set("foo", "hello world").set("bar", Math.PI),
+                new Document("doc2").setScore(2.0).set("foo", "hello werld").set("bar", Math.PI+1),
+                new Document("doc3").setScore(1.0).set("foo", "jello world").set("bar", Math.PI-1),
         };
 
         try {
@@ -49,12 +65,12 @@ public class SimpleIndexTest extends TestCase {
 
 
         try {
-            List<String> ids = idx.get(new Query("myindex").filterPrefix("foo", "hell"));
+            List<Index.Entry> ids = idx.get(new Query("myindex").filterPrefix("foo", "hell"));
 
-            assertTrue(ids.contains("doc1"));
-            assertTrue(ids.contains("doc2"));
-            assertFalse(ids.contains("doc3"));
-
+            assertTrue(ids.contains(new Index.Entry("doc1",0)));
+            assertTrue(ids.contains(new Index.Entry("doc2",0)));
+            assertFalse(ids.contains(new Index.Entry("doc3",0)));
+            assertEquals(ids.get(0).id, "doc2");
         } catch (IOException e) {
             e.printStackTrace();
             fail();
@@ -196,7 +212,7 @@ public class SimpleIndexTest extends TestCase {
         Query q = new Query("myindex");
 
         q.filterNear("bar", 32.0667, 34.8000);
-        List<String> ids = null;
+        List<Index.Entry> ids = null;
         try {
             ids = idx.get(q);
         } catch (IOException e) {

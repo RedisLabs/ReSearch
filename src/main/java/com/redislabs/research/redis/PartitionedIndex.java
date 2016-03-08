@@ -8,7 +8,9 @@ import com.redislabs.research.Spec;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.PriorityQueue;
 import java.util.concurrent.*;
 import java.util.zip.CRC32;
 
@@ -81,10 +83,10 @@ public class PartitionedIndex implements Index {
     }
 
     @Override
-    public List<String> get(final Query q) throws IOException, InterruptedException {
+    public List<Entry> get(final Query q) throws IOException, InterruptedException {
 
         // this is the queue we use to aggregate the results
-        final ConcurrentLinkedQueue<List<String>> queue = new ConcurrentLinkedQueue<>();
+        final BlockingDeque<List<Entry>> queue = new LinkedBlockingDeque<>(partitions.length);
 
         // submit the sub tasks to the thread pool
         for (Index idx : partitions) {
@@ -92,7 +94,7 @@ public class PartitionedIndex implements Index {
 
             pool.submit( new Callable<Void>() {
                 public Void call() throws IOException, InterruptedException {
-                    List<String> r = fidx.get(q);
+                    List<Entry> r = fidx.get(q);
 
                     queue.add(r);
                     return null;
@@ -103,19 +105,32 @@ public class PartitionedIndex implements Index {
 
 
         // collect the results
-        List<String> ret = new ArrayList<>(q.sort.offset + q.sort.limit);
-        int took = 0;
-        while (ret.size() < q.sort.offset + q.sort.limit && took < partitions.length) {
+        PriorityQueue<Entry> entries = new PriorityQueue<Entry>(q.sort.limit, new Comparator<Entry>(){
 
-            List<String> res = queue.poll();
+            @Override
+            public int compare(Entry e1, Entry e2) {
+                return e1.score == e2.score ? 0 : (e1.score > e2.score ? -1 : 1);
+            }
+        });
+
+        int took = 0;
+        while (took < partitions.length) {
+
+            List<Entry> res = queue.poll(timeoutMilli, TimeUnit.MILLISECONDS);
             if (res != null) {
-                ret.addAll(res);
+                entries.addAll(res);
                 took++;
             }
 
-
         }
-        return ret.subList(q.sort.offset, Math.min(q.sort.offset+q.sort.limit, ret.size()));
+
+        List<Entry> ret = new ArrayList<>(entries.size());
+        while (entries.size() > 0) {
+            ret.add(entries.poll());
+        }
+        return ret;
+
+
 
     }
 
