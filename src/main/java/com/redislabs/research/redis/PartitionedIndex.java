@@ -10,6 +10,7 @@ import com.sun.deploy.util.ArrayUtil;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.CRC32;
 
 /**
@@ -49,6 +50,7 @@ public class PartitionedIndex implements Index {
         pool = Executors.newFixedThreadPool(numThreads);
 
 
+
     }
 
     private CRC32 hash = new CRC32();
@@ -84,18 +86,28 @@ public class PartitionedIndex implements Index {
     public List<Entry> get(final Query q) throws IOException, InterruptedException {
 
         // this is the queue we use to aggregate the results
-        final BlockingDeque<List<Entry>> queue = new LinkedBlockingDeque<>(partitions.length);
+        final PriorityQueue<Entry> entries = new PriorityQueue<>(q.sort.limit*partitions.length);
 
+        final CountDownLatch latch = new CountDownLatch(partitions.length);
         // submit the sub tasks to the thread pool
         for (Index idx : partitions) {
             final Index fidx = idx;
 
-            pool.submit( new Callable<Void>() {
-                public Void call() throws IOException, InterruptedException {
-                    List<Entry> r = fidx.get(q);
-
-                    queue.add(r);
-                    return null;
+            pool.execute(new Runnable() {
+                @Override
+                public void run() {
+                    List<Entry> r = null;
+                    try {
+                        r = fidx.get(q);
+                    } catch (IOException | InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    if (r != null) {
+                        synchronized (entries) {
+                            entries.addAll(r);
+                        }
+                    }
+                    latch.countDown();
                 }
             });
 
@@ -103,20 +115,11 @@ public class PartitionedIndex implements Index {
 
 
         // collect the results
-        PriorityQueue<Entry> entries = new PriorityQueue<>(q.sort.limit);
+        latch.await();
 
-        int took = 0;
-        while (took < partitions.length) {
 
-            List<Entry> res = queue.poll(timeoutMilli, TimeUnit.MILLISECONDS);
-            if (res != null) {
-                entries.addAll(res);
-                while (entries.size() > q.sort.limit) {
-                    entries.poll();
-                }
-                took++;
-            }
-
+        while (entries.size() > q.sort.limit) {
+            entries.poll();
         }
 
         List<Entry> ret = new ArrayList<>(entries.size());
