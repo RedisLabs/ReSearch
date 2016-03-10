@@ -102,10 +102,15 @@ public class Encoders {
 
         @Override
         public List<byte[]> encode(Double[] latlon) {
-
-            GeoHash h = GeoHash.withCharacterPrecision(latlon[0], latlon[1], precision);
             ArrayList<byte[]> ret = new ArrayList<>(1);
-            ret.add(h.toBase32().getBytes());
+            try {
+                GeoHash h = GeoHash.withCharacterPrecision(latlon[0], latlon[1], precision);
+                ret.add(h.toBase32().getBytes());
+            }
+            catch (IllegalArgumentException e) {
+                e.printStackTrace();
+            }
+
             return ret;
 
         }

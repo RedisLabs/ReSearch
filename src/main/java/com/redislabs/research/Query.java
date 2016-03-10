@@ -171,6 +171,11 @@ public class Query {
         return this;
     }
 
+    public Query filterNear(String property, double []latlon) {
+        filters.add(new Filter<>(property, Op.Near, latlon[0], latlon[1]));
+        return this;
+    }
+
     /**
      * Create a GREATER THAN filter
      * @param property the name of the property filtered by
