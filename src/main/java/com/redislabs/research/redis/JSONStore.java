@@ -21,13 +21,15 @@ public class JSONStore implements DocumentStore {
     private final Gson gson;
 
     public JSONStore(String redisURI) {
-        pool = new JedisPool(new JedisPoolConfig(), URI.create(redisURI));
+        JedisPoolConfig conf = new JedisPoolConfig();
+        conf.setMaxTotal(100);
+        pool = new JedisPool(conf, URI.create(redisURI));
         gson = new Gson();
 
     }
 
     private String key(String id) {
-        return "d:"  +id;
+        return "d:" + id;
     }
 
     @Override
@@ -50,13 +52,13 @@ public class JSONStore implements DocumentStore {
 
     /**
      * load documents by ids
+     *
      * @param ids the ids of the docs to load
      * @return a list of documents loaded
      */
     @Override
     public List<Document> load(List<String> ids) {
 
-        Jedis conn = pool.getResource();
         List<Document> ret;
 
         String[] keys = new String[ids.size()];
@@ -65,20 +67,22 @@ public class JSONStore implements DocumentStore {
             keys[i] = key(id);
             i++;
         }
-        try {
-            //decode rets
-            List<String> objs = conn.mget(keys);
-            ret = new ArrayList<>(objs.size());
-            for (String encoded : objs) {
-                if (encoded == null || encoded.isEmpty()) {
-                    continue;
-                }
-                ret.add(gson.fromJson(encoded, Document.class));
-            }
 
-        }finally {
-            conn.close();
+        List<String> objs;
+        try (Jedis conn = pool.getResource()) {
+            //decode rets
+            objs = conn.mget(keys);
         }
+
+        ret = new ArrayList<>(objs.size());
+        for (String encoded : objs) {
+            if (encoded == null || encoded.isEmpty()) {
+                continue;
+            }
+            ret.add(gson.fromJson(encoded, Document.class));
+        }
+
+
         return ret;
 
     }
@@ -93,11 +97,8 @@ public class JSONStore implements DocumentStore {
         }
 
 
-        Jedis conn = pool.getResource();
-        try {
+        try (Jedis conn = pool.getResource()) {
             return conn.del(keys).intValue();
-        } finally {
-            conn.close();
         }
 
 

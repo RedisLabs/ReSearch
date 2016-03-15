@@ -71,7 +71,6 @@ public class Encoders {
 
                 int index = normalized.indexOf(' ');
                 while (index > 0 && index < normalized.length()) {
-
                     ret.add(normalized.substring(index+1).getBytes());
                     index = normalized.indexOf(' ', index+1);
                 }

@@ -10,7 +10,7 @@ import com.redislabs.research.text.NaiveNormalizer;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+
 import java.util.*;
 
 /**
@@ -110,9 +110,9 @@ public class SimpleIndex extends BaseIndex {
 
         int idx = -1;
         int idIdx = -1;
-        for (int i = 1; i < raw.length; i++) {
-            if (raw[i] == '|' && raw[i-1] == '|') {
-                idx = i + 1;
+        for (int i = 0; i < raw.length; i++) {
+            if (raw[i] == '|' && i < raw.length - 1 && raw[i+1] == '|') {
+                idx = i + 2;
                 break;
             }
         }
@@ -130,9 +130,10 @@ public class SimpleIndex extends BaseIndex {
         }
 
 
-        String id = new String(Arrays.copyOfRange(raw, idIdx, raw.length));
+        String id = new String(raw, idIdx, raw.length-idIdx);
         ByteBuffer bb = ByteBuffer.wrap(raw, idx, idIdx - idx -1);
-        bb.order(ByteOrder.BIG_ENDIAN);
+        //bb.order(ByteOrder.BIG_ENDIAN);
+
         double score = Double.longBitsToDouble(bb.getLong());
 
         return new Entry(id, 1d/score);
@@ -149,15 +150,17 @@ public class SimpleIndex extends BaseIndex {
 
         // Get the redis ranges to look for
         Range rng = new Range(q);
-        Jedis conn = pool.getResource();
         Set<byte[]> entries;
 
         // get the ids - either with limit or not
-        if (q.sort != null && q.sort.limit != null && q.sort.offset != null) {
-            entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to, q.sort.offset, q.sort.limit);
-        } else {
-            entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to);
+        try (Jedis conn = pool.getResource()) {
+            if (q.sort != null && q.sort.limit != null && q.sort.offset != null) {
+                entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to, q.sort.offset, q.sort.limit);
+            } else {
+                entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to);
+            }
         }
+
 
         // extract the ids from the entries
         List<Entry>ids = new ArrayList<>(entries.size());
@@ -165,8 +168,6 @@ public class SimpleIndex extends BaseIndex {
             //String se = new String(entry);
             ids.add(extractEntry(entry));
         }
-
-        conn.close();
         return ids;
 
     }

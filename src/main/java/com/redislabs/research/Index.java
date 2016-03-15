@@ -4,11 +4,12 @@ import com.sun.org.apache.xpath.internal.operations.Bool;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 /**
  * The basic interface for all indexes
  */
-public interface Index {
+public interface Index  {
 
     public class Entry implements Comparable<Entry> {
         public String id;
@@ -28,6 +29,7 @@ public interface Index {
             return this.score == o.score ? 0 : (score < o.score ? -1 : 1);
         }
     }
+
 
     Boolean index(Document ...docs) throws IOException;
     List<Entry> get(Query q) throws IOException, InterruptedException;

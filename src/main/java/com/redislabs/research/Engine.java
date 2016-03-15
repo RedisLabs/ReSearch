@@ -54,11 +54,6 @@ public class Engine {
             e.printStackTrace();
             throw new SearchException(e);
         }
-
-
-
-
-        List<Document> result = null;
         if (entries == null || entries.isEmpty()) {
             return null;
         }

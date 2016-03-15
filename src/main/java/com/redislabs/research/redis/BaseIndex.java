@@ -11,6 +11,7 @@ import java.net.URI;
  * Created by dvirsky on 28/02/16.
  */
 public abstract class BaseIndex implements Index {
+    protected final String redisURI;
     protected JedisPool pool;
     Spec spec;
     String name;
@@ -18,7 +19,20 @@ public abstract class BaseIndex implements Index {
     public BaseIndex(String name, Spec spec, String redisURI) {
         this.name = name;
         this.spec = spec;
-        pool = new JedisPool(new JedisPoolConfig(), URI.create(redisURI));
+        this.redisURI = redisURI.replace("redis://", "");
+        JedisPoolConfig conf = new JedisPoolConfig();
+        conf.setMaxTotal(500);
+        conf.setTestOnBorrow(false);
+        conf.setTestOnReturn(false);
+        conf.setTestOnCreate(false);
+        conf.setTestWhileIdle(false);
+        conf.setMinEvictableIdleTimeMillis(60000);
+        conf.setTimeBetweenEvictionRunsMillis(30000);
+        conf.setNumTestsPerEvictionRun(-1);
+
+        conf.setFairness(true);
+
+        pool = new JedisPool(conf, URI.create(redisURI));
     }
 
     @Override

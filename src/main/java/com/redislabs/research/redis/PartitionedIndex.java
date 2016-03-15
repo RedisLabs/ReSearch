@@ -47,7 +47,9 @@ public class PartitionedIndex implements Index {
             partitions[i] = factory.create(pname, spec, redisURIs[i % redisURIs.length]);
         }
 
-        pool = Executors.newFixedThreadPool(numThreads);
+        //pool = Executors.newFixedThreadPool(numThreads);
+        pool = new ForkJoinPool(numThreads,
+                ForkJoinPool.defaultForkJoinWorkerThreadFactory, null, true);
 
 
 
@@ -88,34 +90,30 @@ public class PartitionedIndex implements Index {
         // this is the queue we use to aggregate the results
         final PriorityQueue<Entry> entries = new PriorityQueue<>(q.sort.limit*partitions.length);
 
-        final CountDownLatch latch = new CountDownLatch(partitions.length);
-        // submit the sub tasks to the thread pool
-        for (Index idx : partitions) {
-            final Index fidx = idx;
+        List<Callable<List<Entry>>> tasks = new ArrayList<>(partitions.length);
 
-            pool.execute(new Runnable() {
+        // submit the sub tasks to the thread pool
+        for (final Index idx : partitions) {
+            tasks.add(new Callable<List<Entry>>() {
                 @Override
-                public void run() {
-                    List<Entry> r = null;
-                    try {
-                        r = fidx.get(q);
-                    } catch (IOException | InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    if (r != null) {
-                        synchronized (entries) {
-                            entries.addAll(r);
-                        }
-                    }
-                    latch.countDown();
+                public List<Entry> call() throws Exception {
+                    return idx.get(q);
                 }
             });
-
         }
 
+        List<Future<List<Entry>>> futures = pool.invokeAll(tasks, timeoutMilli, TimeUnit.MILLISECONDS);
 
-        // collect the results
-        latch.await();
+        for (Future<List<Entry>> future : futures ) {
+            try {
+                List<Entry> es = future.get();
+                if (es != null) {
+                    entries.addAll(es);
+                }
+            } catch (ExecutionException e) {
+                e.printStackTrace();
+            }
+        }
 
 
         while (entries.size() > q.sort.limit) {

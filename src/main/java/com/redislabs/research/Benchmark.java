@@ -13,10 +13,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -199,7 +196,7 @@ public abstract class Benchmark {
     public void start() {
 
         System.out.printf("Benchmarking %s using %d threads\n", tag, numThreads);
-        ExecutorService pool = Executors.newFixedThreadPool(numThreads);
+        ExecutorService pool = new ForkJoinPool(numThreads);
 
 
         final ParallelContext ctx = new ParallelContext(tag, runDuration*1000, 10000);
