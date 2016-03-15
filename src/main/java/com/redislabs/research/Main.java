@@ -134,14 +134,14 @@ public class Main {
                     new Spec(Spec.prefix("name", false)),
                     numPartitions,
                     500,
-                    numThreads,
+                    numPartitions * numThreads,
                     redisHosts);
 
             Index nameCityIndex = new PartitionedIndex(new SimpleIndex.Factory(), "nmg",
                     new Spec(Spec.geo("latlon", Encoders.Geohash.PRECISION_40KM), Spec.prefix("name", false)),
                     numPartitions,
                     500,
-                    numThreads,
+                    numPartitions * numThreads,
                     redisHosts);
 
 
@@ -202,11 +202,9 @@ public class Main {
 
         private void runByName(Context ctx) {
             int sz = queries.size();
-            int rnd = Math.abs(new Random().nextInt());
             int x = 0;
             do {
-                engine.search(new Query("nm").filterPrefix("name", queries.get((rnd+x) % sz)));
-
+                engine.search(new Query("nm").filterPrefix("name", queries.get(x % sz)));
                 ++x;
             } while (ctx.tick());
 

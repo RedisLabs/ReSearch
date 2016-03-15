@@ -196,7 +196,7 @@ public abstract class Benchmark {
     public void start() {
 
         System.out.printf("Benchmarking %s using %d threads\n", tag, numThreads);
-        ExecutorService pool = new ForkJoinPool(numThreads);
+        ExecutorService pool = Executors.newCachedThreadPool();
 
 
         final ParallelContext ctx = new ParallelContext(tag, runDuration*1000, 10000);

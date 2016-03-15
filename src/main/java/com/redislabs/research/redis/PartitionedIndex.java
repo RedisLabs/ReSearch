@@ -19,7 +19,7 @@ import java.util.zip.CRC32;
 public class PartitionedIndex implements Index {
 
     Index[] partitions;
-    ExecutorService pool;
+    static ExecutorService pool = Executors.newWorkStealingPool();;
     int timeoutMilli;
     String name;
 
@@ -47,9 +47,6 @@ public class PartitionedIndex implements Index {
             partitions[i] = factory.create(pname, spec, redisURIs[i % redisURIs.length]);
         }
 
-        //pool = Executors.newFixedThreadPool(numThreads);
-        pool = new ForkJoinPool(numThreads,
-                ForkJoinPool.defaultForkJoinWorkerThreadFactory, null, true);
 
 
 
@@ -94,6 +91,7 @@ public class PartitionedIndex implements Index {
 
         // submit the sub tasks to the thread pool
         for (final Index idx : partitions) {
+
             tasks.add(new Callable<List<Entry>>() {
                 @Override
                 public List<Entry> call() throws Exception {
@@ -105,13 +103,15 @@ public class PartitionedIndex implements Index {
         List<Future<List<Entry>>> futures = pool.invokeAll(tasks, timeoutMilli, TimeUnit.MILLISECONDS);
 
         for (Future<List<Entry>> future : futures ) {
-            try {
-                List<Entry> es = future.get();
-                if (es != null) {
-                    entries.addAll(es);
+            if (!future.isCancelled()) {
+                try {
+                    List<Entry> es = future.get();
+                    if (es != null) {
+                        entries.addAll(es);
+                    }
+                } catch (ExecutionException e) {
+                    e.printStackTrace();
                 }
-            } catch (ExecutionException e) {
-                e.printStackTrace();
             }
         }
 

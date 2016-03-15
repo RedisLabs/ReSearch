@@ -13,6 +13,7 @@ import java.nio.ByteBuffer;
 
 import java.util.*;
 
+
 /**
  * SimpleIndex is the basic, prefix or exact value index, withuot partitioning.
  * Partitioning is built by creating multiple instances of SimpleIndex for each partition
@@ -160,6 +161,7 @@ public class SimpleIndex extends BaseIndex {
                 entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to);
             }
         }
+
 
 
         // extract the ids from the entries

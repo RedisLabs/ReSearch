@@ -21,6 +21,7 @@ import redis.clients.jedis.ZParams;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.Future;
 import java.util.zip.CRC32;
 
 /**
@@ -125,6 +126,7 @@ public class FullTextFacetedIndex extends BaseIndex {
 
         return qxp.execute();
     }
+
 
     @Override
     public Boolean delete(String... ids) {

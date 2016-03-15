@@ -1,5 +1,6 @@
 package com.redislabs.research.redis;
 
+
 import com.redislabs.research.Index;
 import com.redislabs.research.Spec;
 import redis.clients.jedis.JedisPool;
@@ -15,6 +16,7 @@ public abstract class BaseIndex implements Index {
     protected JedisPool pool;
     Spec spec;
     String name;
+
 
     public BaseIndex(String name, Spec spec, String redisURI) {
         this.name = name;
