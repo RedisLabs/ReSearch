@@ -18,7 +18,7 @@ public class Token {
         offsets = new ArrayList<>(1);
     }
 
-    Token(String s, double freq, Integer[]offsets) {
+    public Token(String s, double freq, Integer ...offsets) {
         text = s;
         frequency = freq;
         this.offsets = Arrays.asList(offsets);

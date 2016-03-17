@@ -30,7 +30,7 @@ public class WordTokenizer implements Tokenizer {
 
     @Override
     public List<Token> tokenize(String text) {
-        StringTokenizer tkn = new StringTokenizer(text, " \t\n\r\f\"\'.,!@#$%^&*()[]{}\\/<>-_|:;~");
+        StringTokenizer tkn = new StringTokenizer(text, " \t\n\r\f\"\'.,!@#$?%^&*()[]{}\\/<>-_|:;~");
 
         HashMap<String, Token> tokens = new HashMap<>();
         int offset = 0;

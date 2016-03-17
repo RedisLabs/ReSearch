@@ -26,7 +26,7 @@ import java.util.zip.CRC32;
 
 /**
  * This is a full text index operating on intersection of faceted sorted sets
- *
+ * <p/>
  * Text fields are tokenized and inserted in
  */
 public class FullTextFacetedIndex extends BaseIndex {
@@ -35,6 +35,7 @@ public class FullTextFacetedIndex extends BaseIndex {
     public static class Factory implements IndexFactory {
 
         private Tokenizer tokenizer;
+
         public Factory(Tokenizer tokenizer) {
             this.tokenizer = tokenizer;
         }
@@ -57,6 +58,9 @@ public class FullTextFacetedIndex extends BaseIndex {
 
     private LuaScript zrangeByScoreStore;
 
+
+    private LuaScript intersectTokens;
+
     public FullTextFacetedIndex(String redisURI, String name, Spec spec, Tokenizer tokenizer) throws IOException {
         super(name, spec, redisURI);
         this.tokenizer = tokenizer;
@@ -65,7 +69,8 @@ public class FullTextFacetedIndex extends BaseIndex {
     }
 
     private void initScripts(String redisURI) throws IOException {
-        zrangeByScoreStore = LuaScript.fromResource("lua/zrangebyscore_store.lua",redisURI);
+        zrangeByScoreStore = LuaScript.fromResource("lua/zrangebyscore_store.lua", redisURI);
+        intersectTokens = LuaScript.fromResource("lua/tokens_intersect.lua", redisURI);
     }
 
     @Override
@@ -80,6 +85,8 @@ public class FullTextFacetedIndex extends BaseIndex {
 
                     switch (field.type) {
                         case FullText:
+                            //TODO: Support multiple fields index
+
                             String text = (String) doc.property(field.name);
                             if (text != null && !text.isEmpty()) {
                                 indexStringField(doc.getId(), doc.getScore(), text, pipe);
@@ -87,25 +94,25 @@ public class FullTextFacetedIndex extends BaseIndex {
                             break;
                         case Numeric:
 
-                            Number num = (Number)doc.property(field.name);
+                            Number num = (Number) doc.property(field.name);
                             if (num != null) {
                                 indexNumeric(field.name, doc.getId(), num, pipe);
                             }
                             break;
                         case Geo:
-                            Spec.GeoField gf = (Spec.GeoField)field;
-                            Double[] latlon = (Double[])doc.property(field.name);
+                            Spec.GeoField gf = (Spec.GeoField) field;
+                            Double[] latlon = (Double[]) doc.property(field.name);
                             if (latlon.length != 2) {
                                 throw new RuntimeException("Invalid length for lat,lon pair");
                             }
                             indexGeoPoint(doc.getId(), latlon[0], latlon[1], gf.precision, pipe);
                             break;
                         default:
-                            throw new RuntimeException("Unsuppported index spec type for " + field.name  + ": " + field.type.toString());
+                            throw new RuntimeException("Unsuppported index spec type for " + field.name + ": " + field.type.toString());
                     }
 
                 }
-            }catch (Exception ex) {
+            } catch (Exception ex) {
                 ex.printStackTrace(System.err);
             }
 
@@ -113,7 +120,7 @@ public class FullTextFacetedIndex extends BaseIndex {
         }
         try {
             pipe.sync();
-        }finally {
+        } finally {
             conn.close();
         }
         return true;
@@ -139,17 +146,16 @@ public class FullTextFacetedIndex extends BaseIndex {
     }
 
     private String tokenKey(String token) {
-        return "f:"+name+ ":"+token;
+        return "f:" + name + ":" + token;
     }
 
     private String fieldKey(String field) {
-        return "k:"+name+ ":"+field;
+        return "k:" + name + ":" + field;
     }
 
     private String geoKey(String geoHash) {
-        return "g:"+name+ ":"+geoHash;
+        return "g:" + name + ":" + geoHash;
     }
-
 
 
     void indexNumeric(String fieldName, String docId, Number value, Pipeline pipe) {
@@ -178,7 +184,7 @@ public class FullTextFacetedIndex extends BaseIndex {
 
 
         for (Token tok : tokens) {
-            pipe.zadd(tokenKey(tok.text), docScore*tok.frequency, docId);
+            pipe.zadd(tokenKey(tok.text), docScore * tok.frequency, docId);
         }
 
         // only if the connection was not provided to us - commit everything
@@ -207,8 +213,8 @@ public class FullTextFacetedIndex extends BaseIndex {
             this.query = query;
             for (Query.Filter flt : query.filters) {
                 Spec.Field field = null;
-                for (Spec.Field f : spec.fields ) {
-                    if (f.name.equals(flt.property)) {
+                for (Spec.Field f : spec.fields) {
+                    if (f.matches(f.name)) {
                         field = f;
                         break;
                     }
@@ -223,10 +229,10 @@ public class FullTextFacetedIndex extends BaseIndex {
                         if (flt.values.length != 1) {
                             throw new RuntimeException("Only one string value is allowed for fulltext filters");
                         }
-                        root.addChild(new IntersectStep((String)flt.values[0]));
+                        root.addChild(new TextIntersectStep((String) flt.values[0]));
                         break;
                     case Numeric:
-                        Double min = null, max = null;
+                        Double min, max = null;
                         switch (flt.op) {
                             case Between:
                                 min = (Double) flt.values[0];
@@ -241,20 +247,18 @@ public class FullTextFacetedIndex extends BaseIndex {
                                 break;
                             default:
                                 throw new RuntimeException("Unsupported numeric op!");
-
-
                         }
 
-                        root = new RangeIntersectStep(flt.property, min,max, root);
+                        root.addChild(new RangeStep(flt.property, min, max));
                         break;
                     case Geo:
                         if (flt.op != Query.Op.Radius) {
                             throw new RuntimeException("Unsupported op for geo index: " + flt.op.toString());
                         }
-                        double lat = (double)flt.values[0];
-                        double lon = (double)flt.values[1];
-                        double radius = (double)flt.values[2];
-                        root.addChild(new GeoRadiusStep(lat, lon, radius, ((Spec.GeoField)field).precision));
+                        double lat = (double) flt.values[0];
+                        double lon = (double) flt.values[1];
+                        double radius = (double) flt.values[2];
+                        root.addChild(new GeoRadiusStep(lat, lon, radius, ((Spec.GeoField) field).precision));
                         break;
                     default:
                         throw new RuntimeException("Unsupported field type: " + field.type.toString());
@@ -273,15 +277,13 @@ public class FullTextFacetedIndex extends BaseIndex {
             String tmpKey = root.execute(pipe);
 
 
-
-
             pipe.zrevrangeWithScores(tmpKey, query.sort.offset, query.sort.offset + query.sort.limit);
 
             List<Object> res = pipe.syncAndReturnAll();
             conn.close();
 
 
-            Set<Tuple> ids = (Set<Tuple>) res.get(res.size()-1);
+            Set<Tuple> ids = (Set<Tuple>) res.get(res.size() - 1);
             List<Entry> entries = new ArrayList<>(ids.size());
             for (Tuple t : ids) {
                 entries.add(new Entry(t.getElement(), t.getScore()));
@@ -297,6 +299,7 @@ public class FullTextFacetedIndex extends BaseIndex {
 
         List<Step> children;
 
+        static final protected int DEFAULT_EXPIRATION = 60;
 
         @Override
         public String toString() {
@@ -310,11 +313,11 @@ public class FullTextFacetedIndex extends BaseIndex {
             for (Step c : children) {
                 childrenstr += c.toString(tabs + "  ") + ",\n";
             }
-            return String.format("%s%s {\n%s%s}", tabs, getClass().getSimpleName(), childrenstr, tabs );
+            return String.format("%s%s {\n%s%s}", tabs, getClass().getSimpleName(), childrenstr, tabs);
         }
 
 
-        public Step(Step ...children) {
+        public Step(Step... children) {
             this.children = new LinkedList<>(Arrays.asList(children));
         }
 
@@ -335,7 +338,7 @@ public class FullTextFacetedIndex extends BaseIndex {
 
         abstract String execute(Pipeline pipe);
 
-        protected String makeTmpKey(String ...subKeys) {
+        protected String makeTmpKey(String... subKeys) {
 
             Hashids hids = new Hashids();
             if (subKeys.length == 0) {
@@ -349,22 +352,32 @@ public class FullTextFacetedIndex extends BaseIndex {
             return hids.encrypt(crc.getValue());
         }
 
+        double weight() {
+            return 1.0;
+        }
+
+        /**
+         * Get the respective weights of the children to use for aggregated actions
+         *
+         * @return
+         */
+        protected double[] childrenWeights() {
+            double[] ret = new double[children.size()];
+            for (int i = 0; i < children.size(); i++) {
+                ret[i] = children.get(i).weight();
+            }
+            return ret;
+        }
+
     }
 
     private class IntersectStep extends Step {
 
 
-        public IntersectStep(Step ...children) {
+        public IntersectStep(Step... children) {
             super(children);
         }
 
-        public IntersectStep(String text) {
-            super();
-
-            for (Token tok : tokenizer.tokenize(text)) {
-                addChild(new TokenStep(tok));
-            }
-        }
 
         @Override
         String execute(Pipeline pipe) {
@@ -372,58 +385,85 @@ public class FullTextFacetedIndex extends BaseIndex {
             String[] tmpKeys = executeChildren(pipe);
 
             String tk = makeTmpKey(tmpKeys);
-            pipe.zinterstore(tk, new ZParams(), tmpKeys);
-            pipe.expire(tk, 60);
+            pipe.zinterstore(tk, new ZParams().weightsByDouble(childrenWeights()), tmpKeys);
+            pipe.expire(tk, DEFAULT_EXPIRATION);
             return tk;
         }
     }
 
-    private class RangeIntersectStep extends Step {
+    private class TextIntersectStep extends Step {
+
+        List<Token> tokens;
+        String raw;
+
+        /**
+         * Create an intersection step between multiple token indexes
+         *
+         * @param text
+         */
+        public TextIntersectStep(String text) {
+            super();
+            raw = text;
+            tokens = tokenizer.tokenize(text);
+
+        }
+
+        @Override
+        String execute(Pipeline pipe) {
+
+            if (tokens.size() == 1) {
+                return tokenKey(tokens.get(0).text);
+            }
+
+            String[] keys = new String[tokens.size()+1];
+            keys[0] = makeTmpKey(raw);
+            for (int i = 0; i < tokens.size(); i++) {
+                keys[i+1] = tokenKey(tokens.get(i).text);
+            }
+
+            intersectTokens.execute(pipe, 1, keys);
+            pipe.expire(keys[0], DEFAULT_EXPIRATION);
+            return keys[0];
+        }
+    }
+
+    private class RangeStep extends Step {
 
         private String fieldName;
         private Double min;
         private Double max;
 
-        public RangeIntersectStep(String fieldName, Double min, Double max, Step ...children) {
-            super(children);
+        public RangeStep(String fieldName, Double min, Double max) {
+
             this.fieldName = fieldName;
             this.min = min;
             this.max = max;
         }
 
 
-
         @Override
         String execute(Pipeline pipe) {
 
-            String tk = fieldKey(fieldName);
-            if (!children.isEmpty()) {
-                String[] tmpKeys = executeChildren(pipe);
-
-                tk = makeTmpKey(tmpKeys);
-
-                pipe.zinterstore(tk, new ZParams().weightsByDouble(1, 0), fieldKey(fieldName), tmpKeys[0]);
-                pipe.expire(tk, 60);
-            }
-
-            String tk_ = tk + "_";
-            pipe.del(tk_);
-
-            zrangeByScoreStore.execute(pipe, 2, tk, tk_,
+            String tk = makeTmpKey();
+            // create a key with the given range we want, using the lua script
+            zrangeByScoreStore.execute(pipe, 2, fieldKey(fieldName), tk,
                     min != null ? min.toString() : "-inf",
                     max != null ? max.toString() : "+inf");
-            pipe.expire(tk_, 60);
-            return tk_;
+
+            pipe.expire(tk, DEFAULT_EXPIRATION);
+            return tk;
         }
 
-
-
+        @Override
+        double weight() {
+            return 0;
+        }
 
     }
 
     private class UnionStep extends Step {
 
-        public UnionStep(Step ...children) {
+        public UnionStep(Step... children) {
             super(children);
         }
 
@@ -433,29 +473,10 @@ public class FullTextFacetedIndex extends BaseIndex {
             String[] tmpKeys = executeChildren(pipe);
 
             String tk = makeTmpKey(tmpKeys);
-            pipe.zunionstore(tk, new ZParams(), tmpKeys);
-            pipe.expire(tk, 60);
+            pipe.zunionstore(tk, new ZParams().weightsByDouble(childrenWeights()), tmpKeys);
+            pipe.expire(tk, DEFAULT_EXPIRATION);
             return tk;
         }
-    }
-
-    private class TokenStep extends Step {
-        private final Token token;
-
-        @Override
-        public String toString(String tabs) {
-            return String.format("%sTokenStep('%s')", tabs, token.text);
-        }
-        public TokenStep(Token tok) {
-            super();
-            this.token = tok;
-        }
-        @Override
-        String execute(Pipeline pipe) {
-            return tokenKey(token.text);
-        }
-
-
     }
 
 
@@ -471,6 +492,7 @@ public class FullTextFacetedIndex extends BaseIndex {
         public String toString(String tabs) {
             return String.format("%sGeoRadiusStep(%.03f,%.03f => %.02fm))", tabs, lat, lon, radius);
         }
+
         public GeoRadiusStep(double lat, double lon, double radius, int precision) {
             super();
             this.lat = lat;
@@ -496,12 +518,16 @@ public class FullTextFacetedIndex extends BaseIndex {
             pipe.zunionstore(tmpKey, new ZParams().aggregate(ZParams.Aggregate.MAX)
                     .weightsByDouble(scoresArr), keysArr);
             return tmpKey;
+        }
 
-
+        @Override
+        double weight() {
+            return 0d;
         }
 
         /**
          * Calculate the geo hash cells we need to query in order to cover all points within this query
+         *
          * @return
          */
         private Set<String> getSearchHashes() {
@@ -524,9 +550,9 @@ public class FullTextFacetedIndex extends BaseIndex {
                 GeoHash[] neighbors = gh.getAdjacent();
                 for (GeoHash neighbor : neighbors) {
                     if (seen.add(neighbor) && q.contains(neighbor)) {
-                            candidates.add(neighbor);
-                        }
+                        candidates.add(neighbor);
                     }
+                }
 
             }
             return hashKeys;

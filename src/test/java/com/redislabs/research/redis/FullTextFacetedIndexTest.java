@@ -36,7 +36,7 @@ public class FullTextFacetedIndexTest extends TestCase {
     public void testIndex() {
 
 
-        Spec spec = new Spec(Spec.fulltext("foo", 1.0), Spec.numeric("bar"),
+        Spec spec = new Spec(Spec.fulltext("foo", "foo"), Spec.numeric("bar"),
                         Spec.geo("location", Encoders.Geohash.PRECISION_4KM));
 
         FullTextFacetedIndex idx = null;
@@ -73,7 +73,7 @@ public class FullTextFacetedIndexTest extends TestCase {
 
             q = new Query("test").filterMatches("foo", "HELLO? world");
             ids = idx.get(q);
-            assertTrue(ids.size() == 1);
+            assertEquals(1, ids.size());
             assertTrue(ids.contains(new Index.Entry("doc1",0)));
 
             q = new Query("test").filterMatches("foo", "hello world")
@@ -87,7 +87,7 @@ public class FullTextFacetedIndexTest extends TestCase {
             q = new Query("test").filterMatches("foo", "hello")
                     .filterRadius("location", 40.7842700, -74.0159700, 4000d);
 
-            for (int i = 0; i < 1000; i++) {
+            for (int i = 0; i < 1; i++) {
                 long st = System.currentTimeMillis();
                 ids = idx.get(q);
                 long elapsed = System.currentTimeMillis() - st;
@@ -107,4 +107,6 @@ public class FullTextFacetedIndexTest extends TestCase {
             fail(e.getMessage());
         }
     }
+
+
 }

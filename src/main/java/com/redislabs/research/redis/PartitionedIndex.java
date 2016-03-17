@@ -19,7 +19,12 @@ import java.util.zip.CRC32;
 public class PartitionedIndex implements Index {
 
     Index[] partitions;
-    static ExecutorService pool = Executors.newWorkStealingPool();;
+
+    // this is basically java 8's newWorkStealingPool
+    static ExecutorService pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors(),
+            ForkJoinPool.defaultForkJoinWorkerThreadFactory,
+            null, true);
+
     int timeoutMilli;
     String name;
 
