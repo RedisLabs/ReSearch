@@ -32,7 +32,10 @@ public class Encoders {
                 // TODO - this is wrong for negatives, fix this
                 buf.putLong(Double.doubleToRawLongBits((Double) num));
             } else if (num instanceof Float) {
-                buf.putLong(Double.doubleToRawLongBits(new Double((Float)num)));
+                // we replace the buffer with a buffer for floats only
+                buf = ByteBuffer.allocate(Integer.SIZE/Byte.SIZE);
+                buf.order(ByteOrder.BIG_ENDIAN);
+                buf.putInt(Float.floatToIntBits((Float) num));
             } else if (num instanceof Integer) {
                 buf.putLong(num.longValue());
             } else if (num instanceof Long) {

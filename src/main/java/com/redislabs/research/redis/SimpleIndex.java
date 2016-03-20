@@ -135,7 +135,7 @@ public class SimpleIndex extends BaseIndex {
         ByteBuffer bb = ByteBuffer.wrap(raw, idx, idIdx - idx -1);
         //bb.order(ByteOrder.BIG_ENDIAN);
 
-        double score = Double.longBitsToDouble(bb.getLong());
+        double score = Float.intBitsToFloat(bb.getInt());
 
         return new Entry(id, 1d/score);
 
@@ -208,12 +208,45 @@ public class SimpleIndex extends BaseIndex {
 
             Object prop = doc.property(field.name);
 
+
             Encoder enc = encoders.get(field.name);
             if (enc == null) {
                 throw new RuntimeException("Missing encoder for " + field.name);
             }
 
             List<byte[]> bytes = enc.encode(Objects.requireNonNull(prop));
+
+            if (field.type == Spec.IndexingType.Prefix) {
+
+                byte[] scoreBytes = scoreEncoder.encode(doc.getScore()).get(0);
+                int n = 0;
+                for (byte[] tmpBytes : bytes) {
+                    int mx = Math.max(scoreBytes.length, tmpBytes.length);
+                    ByteArrayOutputStream buf = new ByteArrayOutputStream(mx);
+                    for (int i =0; i < mx; i++) {
+
+                        if (i < tmpBytes.length) {
+                            buf.write(tmpBytes[i]);
+                        } else if (i < 4 && tmpBytes.length < 4) {
+                            buf.write(0);
+                        }
+
+                        if (i < scoreBytes.length) {
+                            buf.write((byte)(0xff-scoreBytes[i]));
+                        }
+                    }
+
+                    bytes.set(n, buf.toByteArray());
+                    n++;
+
+                }
+
+
+
+
+            }
+
+
             encoded.add(bytes);
 
         }
@@ -236,7 +269,7 @@ public class SimpleIndex extends BaseIndex {
             }
             // append the getId to the entry
             buf.write('|');
-            buf.write(scoreEncoder.encode(1d/doc.getScore()).get(0));
+            buf.write(scoreEncoder.encode(doc.getScore()).get(0));
             buf.write('|');
             buf.write(doc.getId().getBytes());
             //append the document score
@@ -367,13 +400,34 @@ public class SimpleIndex extends BaseIndex {
         }
 
         private void encodePrefixRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
-            List<byte[]> encoded;
+            byte[] encoded;
             if (flt.values.length != 1) {
                 throw new RuntimeException("Only one value allowed for PREFIX filter");
             }
-            encoded = enc.encode(flt.values[0]);
-            tobuf.write(encoded.get(0));
-            frbuf.write(encoded.get(0));
+            encoded = (byte[]) enc.encode(flt.values[0]).get(0);
+            ByteArrayOutputStream interleaved = new ByteArrayOutputStream(encoded.length + 4);
+            for (int i = 0; i <encoded.length; i++) {
+
+                if (i < encoded.length) {
+                    interleaved.write(encoded[i]);
+                } else if (i < 4) {
+                    interleaved.write(0);
+                }
+                if (i < 4) {
+                    interleaved.write(0);
+                }
+
+
+            }
+
+            byte []inter = interleaved.toByteArray();
+
+            frbuf.write(inter);
+            inter[1] = (byte) 0xff;
+            inter[3] = (byte) 0xff;
+            inter[5] = (byte) 0xff;
+            inter[7] = (byte) 0xff;
+            tobuf.write(inter);
         }
 
         private void encodeBetweenRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {

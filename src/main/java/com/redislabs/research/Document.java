@@ -12,10 +12,10 @@ import java.util.Map;
 public class Document implements Serializable {
 
     private String id;
-    private double score;
+    private float score;
     private Map<String, Object> properties;
 
-    public Document(String id, double score) {
+    public Document(String id, float score) {
         this.id = id;
         this.score = score;
         properties = new HashMap<>();
@@ -23,7 +23,7 @@ public class Document implements Serializable {
 
     public Document(String id) {
         this.id = id;
-        this.score = 1.0;
+        this.score = 1.0f;
         properties = new HashMap<>();
     }
 
@@ -47,7 +47,7 @@ public class Document implements Serializable {
     /**
      * @return the document's score
      */
-    public double getScore() {
+    public float getScore() {
         return score;
     }
 
@@ -56,7 +56,7 @@ public class Document implements Serializable {
      * @param score new score to set
      * @return the document itself
      */
-    public Document setScore(double score) {
+    public Document setScore(float score) {
         this.score = score;
         return this;
     }
