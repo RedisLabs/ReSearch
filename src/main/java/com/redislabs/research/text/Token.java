@@ -23,4 +23,13 @@ public class Token {
         frequency = freq;
         this.offsets = Arrays.asList(offsets);
     }
+
+
+
+    public void merge(Token other, int baseOffset) {
+        frequency+=other.frequency;
+        for (int i : other.offsets) {
+            offsets.add(i+baseOffset);
+        }
+    }
 }

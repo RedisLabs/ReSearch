@@ -42,7 +42,7 @@ public class FullTextFacetedIndexTest extends TestCase {
         FullTextFacetedIndex idx = null;
         try {
             idx = new FullTextFacetedIndex("redis://localhost:6379", "test",
-                    spec, new WordTokenizer(new NaiveNormalizer()));
+                    spec, new WordTokenizer(new NaiveNormalizer(), false, null));
         } catch (IOException e) {
             e.printStackTrace();
             fail(e.getMessage());

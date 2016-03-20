@@ -10,10 +10,7 @@ import com.redislabs.research.Index;
 import com.redislabs.research.Query;
 import com.redislabs.research.Spec;
 import com.redislabs.research.dep.Hashids;
-import com.redislabs.research.text.NaiveNormalizer;
-import com.redislabs.research.text.Token;
-import com.redislabs.research.text.Tokenizer;
-import com.redislabs.research.text.WordTokenizer;
+import com.redislabs.research.text.*;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.Tuple;
@@ -44,7 +41,7 @@ public class FullTextFacetedIndex extends BaseIndex {
          * Constructor with defaults
          */
         public Factory() {
-            this(new WordTokenizer(new NaiveNormalizer()));
+            this(new WordTokenizer(new NaiveNormalizer(), false, null));
         }
 
         @Override
@@ -85,12 +82,8 @@ public class FullTextFacetedIndex extends BaseIndex {
 
                     switch (field.type) {
                         case FullText:
-                            //TODO: Support multiple fields index
 
-                            String text = (String) doc.property(field.name);
-                            if (text != null && !text.isEmpty()) {
-                                indexStringField(doc.getId(), doc.getScore(), text, pipe);
-                            }
+                            indexFulltextFields((Spec.FulltextField) field, doc, pipe);
                             break;
                         case Numeric:
 
@@ -174,17 +167,31 @@ public class FullTextFacetedIndex extends BaseIndex {
         }
     }
 
-    void indexStringField(String docId, Double docScore, String text, Pipeline pipe) {
-        Iterable<Token> tokens = tokenizer.tokenize(text);
+    void indexFulltextFields(Spec.FulltextField spec, Document doc, Pipeline pipe) {
+
         Jedis conn = null;
         if (pipe == null) {
             conn = pool.getResource();
             pipe = conn.pipelined();
         }
 
+        TokenSet mergedTokens = new TokenSet();
 
-        for (Token tok : tokens) {
-            pipe.zadd(tokenKey(tok.text), docScore * tok.frequency, docId);
+        for (Map.Entry<String, Double> entry : spec.fields.entrySet()) {
+
+            if (doc.hasProperty(entry.getKey())) {
+
+                Object p = doc.property(entry.getKey());
+                if (p != null && p instanceof String) {
+                    List<Token> tokens = tokenizer.tokenize((String)p);
+                    mergedTokens.addAll(tokens, entry.getValue());
+                }
+            }
+
+        }
+
+        for (Token tok : mergedTokens.values()) {
+            pipe.zadd(tokenKey(tok.text), doc.getScore() * tok.frequency, doc.getId());
         }
 
         // only if the connection was not provided to us - commit everything
@@ -214,7 +221,7 @@ public class FullTextFacetedIndex extends BaseIndex {
             for (Query.Filter flt : query.filters) {
                 Spec.Field field = null;
                 for (Spec.Field f : spec.fields) {
-                    if (f.matches(f.name)) {
+                    if (f.matches(flt.property)) {
                         field = f;
                         break;
                     }
@@ -224,7 +231,7 @@ public class FullTextFacetedIndex extends BaseIndex {
 
                     case FullText:
                         if (flt.op != Query.Op.Matches) {
-                            throw new RuntimeException("Only MATCH filters are allowed for full text filters");
+                            throw new RuntimeException("Only MATCH filters are allowed for full text filters, got " + flt.op.toString());
                         }
                         if (flt.values.length != 1) {
                             throw new RuntimeException("Only one string value is allowed for fulltext filters");
@@ -494,7 +501,7 @@ public class FullTextFacetedIndex extends BaseIndex {
         }
 
         public GeoRadiusStep(double lat, double lon, double radius, int precision) {
-            super();
+
             this.lat = lat;
             this.lon = lon;
             this.radius = radius;

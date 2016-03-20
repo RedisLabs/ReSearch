@@ -73,4 +73,7 @@ public class Document implements Serializable {
         return gson.toJson(this);
     }
 
+    public boolean hasProperty(String key) {
+        return properties.containsKey(key);
+    }
 }

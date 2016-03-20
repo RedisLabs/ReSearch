@@ -77,8 +77,8 @@ public class Spec {
             this.fields = weightedFields;
         }
         public FulltextField(String name, String ...fields) {
-            super(name, null);
-            this.fields = new HashMap<String,Double>();
+            super(name, IndexingType.FullText);
+            this.fields = new HashMap<>();
             for (String f : fields) {
                 this.fields.put(f, 1d);
             }

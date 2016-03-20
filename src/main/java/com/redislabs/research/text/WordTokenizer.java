@@ -19,9 +19,16 @@ public class WordTokenizer implements Tokenizer {
             "they", "this", "to", "was", "will", "with"
     };
 
+    private boolean normalizeFrequencies;
+
     public WordTokenizer(TextNormalizer nrml, String[] stopwords) {
+        this(nrml, true, stopwords);
+    }
+
+    public WordTokenizer(TextNormalizer nrml, boolean normalizeFrequencies, String[] stopwords) {
         normalizer = nrml;
-        this.stopwords = new HashSet<>(Arrays.asList(stopwords));
+        this.normalizeFrequencies = normalizeFrequencies;
+        this.stopwords = new HashSet<>(Arrays.asList(stopwords != null ? stopwords : DEFAULT_STOPWORDS));
 
     }
     public WordTokenizer(TextNormalizer nrml) {
@@ -59,7 +66,7 @@ public class WordTokenizer implements Tokenizer {
 
         }
 
-        if (offset > 0 ) {
+        if (offset > 0 && normalizeFrequencies) {
             for (Token t : tokens.values()) {
                 t.frequency /= offset;
             }
