@@ -68,6 +68,13 @@ public class SimpleIndexTest extends TestCase {
             e.printStackTrace();
         }
 
+        for (int z = 0; z < 1000; z++) {
+            try {
+                idx.index(new Document(String.format("doc_%d", z)).setScore((float)Math.random()).set("foo", String.format("hello world %d", z)));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
 
         try {
             List<Index.Entry> ids = idx.get(new Query("myindex").filterPrefix("foo", "hell"));
@@ -97,7 +104,7 @@ public class SimpleIndexTest extends TestCase {
                 .filterEquals("foo", "hell");
         try {
 
-            SimpleIndex.Range rng = idx.getRange(q);
+            SimpleIndex.Range rng = idx.getRange(q, (byte)0);
 
             System.out.println(new String(rng.from));
             System.out.println(new String(rng.to));
@@ -111,7 +118,7 @@ public class SimpleIndexTest extends TestCase {
         q.filterGreaterThan("bar", 1234);
         try {
 
-            SimpleIndex.Range rng = idx.getRange(q);
+            SimpleIndex.Range rng = idx.getRange(q, (byte)0);
 
             assertEquals("2800000000000004D23A", HexBin.encode(rng.from));
             assertEquals("28FFFFFFFFFFFFFFFF3AFF", HexBin.encode(rng.to));
@@ -125,7 +132,7 @@ public class SimpleIndexTest extends TestCase {
         q.filterGreaterEqual("bar", 1234);
         try {
 
-            SimpleIndex.Range rng = idx.getRange(q);
+            SimpleIndex.Range rng = idx.getRange(q, (byte)0);
 
             assertEquals("5B00000000000004D23A", HexBin.encode(rng.from));
             assertEquals("28FFFFFFFFFFFFFFFF3AFF", HexBin.encode(rng.to));
@@ -139,7 +146,7 @@ public class SimpleIndexTest extends TestCase {
         q.filterLessThan("bar", 1234);
         try {
 
-            SimpleIndex.Range rng = idx.getRange(q);
+            SimpleIndex.Range rng = idx.getRange(q, (byte)0);
 
             assertEquals("5B00000000000000003A", HexBin.encode(rng.from));
             assertEquals("2800000000000004D23AFF", HexBin.encode(rng.to));
@@ -153,7 +160,7 @@ public class SimpleIndexTest extends TestCase {
         q.filterLessEqual("bar", 1234);
         try {
 
-            SimpleIndex.Range rng = idx.getRange(q);
+            SimpleIndex.Range rng = idx.getRange(q, (byte)0);
 
             assertEquals("5B00000000000000003A", HexBin.encode(rng.from));
             assertEquals("5B00000000000004D23AFF", HexBin.encode(rng.to));

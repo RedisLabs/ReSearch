@@ -1,5 +1,7 @@
 package com.redislabs.research.redis;
 
+import com.matttproud.quantile.Estimator;
+import com.matttproud.quantile.Quantile;
 import com.redislabs.research.Index;
 import redis.clients.jedis.*;
 import com.redislabs.research.Document;
@@ -158,26 +160,35 @@ public class SimpleIndex extends BaseIndex {
     @Override
     public List<Index.Entry> get(Query q) throws IOException {
 
-        // Get the redis ranges to look for
-        Range rng = new Range(q);
-        Set<byte[]> entries;
+        // extract the ids from the entries
+        List<Entry> ids = new ArrayList<>(q.sort.limit);
 
-        // get the ids - either with limit or not
-        try (Jedis conn = pool.getResource()) {
-            if (q.sort != null && q.sort.limit != null && q.sort.offset != null) {
-                entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to, q.sort.offset, q.sort.limit);
-            } else {
-                entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to);
+        for (byte i =0 ; i < bestim.QUANTILES.length; i++) {
+            // Get the redis ranges to look for
+            Range rng = new Range(q, i);
+            Set<byte[]> entries;
+
+            // get the ids - either with limit or not
+            try (Jedis conn = pool.getResource()) {
+                if (q.sort != null && q.sort.limit != null && q.sort.offset != null) {
+                    entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to, q.sort.offset, q.sort.limit);
+                } else {
+                    entries = conn.zrangeByLex(name.getBytes(), rng.from, rng.to);
+                }
+            }
+            for (byte[] entry : entries) {
+                //String se = new String(entry);
+                ids.add(extractEntry(entry));
+            }
+
+            if (ids.size() >= q.sort.limit) {
+                break;
             }
         }
 
 
-        // extract the ids from the entries
-        List<Entry> ids = new ArrayList<>(entries.size());
-        for (byte[] entry : entries) {
-            //String se = new String(entry);
-            ids.add(extractEntry(entry));
-        }
+
+
         return ids;
 
     }
@@ -204,6 +215,8 @@ public class SimpleIndex extends BaseIndex {
         return ret;
     }
 
+    private BucketEstimator bestim = new BucketEstimator(BucketEstimator.DEFAULT_SAMPLE_RATE,
+            BucketEstimator.DEFAULT_BUFFER_SIZE);
     /**
      * Encode a document's values into ZSET values to be indexed
      *
@@ -214,6 +227,7 @@ public class SimpleIndex extends BaseIndex {
     List<byte[]> encode(Document doc) throws IOException {
 
         List<List<byte[]>> encoded = new ArrayList<>(spec.fields.size());
+        bestim.sample(doc.getScore());
         for (Spec.Field field : spec.fields) {
 
             Object prop = doc.property(field.name);
@@ -225,7 +239,20 @@ public class SimpleIndex extends BaseIndex {
             }
 
             List<byte[]> bytes;
+            if (field.type == Spec.IndexingType.Prefix) {
+                List<byte[]> tmpBytes = enc.encode(Objects.requireNonNull(prop));
+                bytes = new ArrayList<>(tmpBytes.size());
+
+
+                for (byte[] entry : tmpBytes) {
+                    byte[] pentry = new byte[entry.length + 1];
+                    pentry[0] = bestim.getBucket(doc.getScore());
+                    System.arraycopy(entry, 0, pentry, 1, entry.length);
+                    bytes.add(pentry);
+                }
+            } else {
                 bytes = enc.encode(Objects.requireNonNull(prop));
+            }
 
             encoded.add(bytes);
 
@@ -238,14 +265,9 @@ public class SimpleIndex extends BaseIndex {
 
         for (List<byte[]> lst : product) {
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
-
-
             for (byte[] bs : lst) {
-
-
                 buf.write(bs);
                 buf.write(SEPARATOR);
-
             }
             // append the getId to the entry
             buf.write(SEPARATOR);
@@ -264,10 +286,61 @@ public class SimpleIndex extends BaseIndex {
 
     }
 
+    class BucketEstimator {
+        private Estimator<Float> estimator;
+        private Quantile[] quantiles;
+        private float sampleRate;
+        private int bufferSize;
+        private int numSamples;
+
+        //this is the streaming quantile estimator's buffer capacity
+        public static final int DEFAULT_BUFFER_SIZE = 4096;
+
+        // this is our sample rate, used only after we've reached the buffer size
+        public static final float DEFAULT_SAMPLE_RATE = 0.05f;
+
+        public BucketEstimator(float sampleRate, int bufferSize) {
+            this.sampleRate = sampleRate;
+            this.bufferSize =  bufferSize;
+            this.numSamples = 0;
+
+            quantiles = new Quantile[] {
+                    new Quantile(0.50, 0.050),
+                    new Quantile(0.90, 0.01),
+                    new Quantile(0.95, 0.01),
+                    new Quantile(0.99, 0.01)};
+
+             estimator= new Estimator<>(bufferSize, quantiles);
+
+        }
+
+        public void sample(float score) {
+            if (numSamples++ <= bufferSize || Math.random() <= sampleRate) {
+                estimator.insert(score);
+            }
+        }
+
+        private final double[] QUANTILES = {0.99, 0.95, 0.90, 0.5};
+        public byte getBucket(float score) {
+
+            byte b = 0;
+            for (double q : QUANTILES) {
+                if (score >= estimator.query(q)) {
+                    return b;
+                }
+                b++;
+            }
+            return b;
+        }
+    }
+
+
+
+
 
     /// here for testing purposes
-    Range getRange(Query q) throws IOException {
-        return new Range(q);
+    Range getRange(Query q, byte bucket) throws IOException {
+        return new Range(q, bucket);
     }
 
     /**
@@ -276,11 +349,12 @@ public class SimpleIndex extends BaseIndex {
     class Range {
         byte[] from;
         byte[] to;
+        private byte scoreBucket;
 
 
-        public Range(Query q) throws IOException, RuntimeException {
+        public Range(Query q, byte scoreBucket) throws IOException, RuntimeException {
 
-
+            this.scoreBucket = scoreBucket;
             // we start with [ ... ( but we may change that later based on the filters
             boolean lowerInclusive = true;
             boolean upperInclusive = false;
@@ -313,10 +387,10 @@ public class SimpleIndex extends BaseIndex {
 
                 switch (flt.op) {
                     case Equals:
-                        encodeEqualRange(frbuf, tobuf, flt, enc);
+                        encodeEqualRange(frbuf, tobuf, flt, enc, field.type);
                         break;
                     case Between:
-                        encodeBetweenRange(frbuf, tobuf, flt, enc);
+                        encodeBetweenRange(frbuf, tobuf, flt, enc, field.type);
                         cont = false;
                         break;
                     case Prefix:
@@ -329,22 +403,22 @@ public class SimpleIndex extends BaseIndex {
                         break;
                     // TODO - implement those...
                     case Greater:
-                        encodeGreaterRange(frbuf, tobuf, flt, enc);
+                        encodeGreaterRange(frbuf, tobuf, flt, enc, field.type);
                         lowerInclusive = false;
                         cont = false;
                         break;
                     case GreaterEquals:
-                        encodeGreaterRange(frbuf, tobuf, flt, enc);
+                        encodeGreaterRange(frbuf, tobuf, flt, enc, field.type);
                         lowerInclusive = true;
                         cont = false;
                         break;
                     case Less:
-                        encodeLessRange(frbuf, tobuf, flt, enc);
+                        encodeLessRange(frbuf, tobuf, flt, enc, field.type);
                         upperInclusive = false;
                         cont = false;
                         break;
                     case LessEqual:
-                        encodeLessRange(frbuf, tobuf, flt, enc);
+                        encodeLessRange(frbuf, tobuf, flt, enc, field.type);
                         upperInclusive = true;
                         cont = false;
                         break;
@@ -379,7 +453,8 @@ public class SimpleIndex extends BaseIndex {
             frbuf.write(SEPARATOR);
         }
 
-        private void encodePrefixRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+        private void encodePrefixRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf,
+                                       Query.Filter flt, Encoder enc) throws IOException {
 
             if (flt.values.length != 1) {
                 throw new RuntimeException("Only one value allowed for PREFIX filter");
@@ -387,31 +462,47 @@ public class SimpleIndex extends BaseIndex {
             byte[] encoded = (byte[]) enc.encode(flt.values[0]).get(0);
 
 
+            frbuf.write(scoreBucket);
+
             frbuf.write(encoded);
+            tobuf.write(scoreBucket);
             tobuf.write(encoded);
         }
 
-        private void encodeBetweenRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+        private void encodeBetweenRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc, Spec.IndexingType type) throws IOException {
             List<byte[]> encoded;
             if (flt.values.length != 2) {
                 throw new RuntimeException("Exactly two value allowed for BETWEEN filter");
             }
             encoded = enc.encode(flt.values[0]);
+
+            if (type == Spec.IndexingType.Prefix) {
+                frbuf.write(scoreBucket);
+            }
             frbuf.write(encoded.get(0));
             frbuf.write(SEPARATOR);
             encoded = enc.encode(flt.values[1]);
+            if (type == Spec.IndexingType.Prefix) {
+                tobuf.write(scoreBucket);
+            }
             tobuf.write(encoded.get(0));
             tobuf.write(SEPARATOR);
         }
 
-        private void encodeEqualRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+        private void encodeEqualRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc, Spec.IndexingType type) throws IOException {
             List<byte[]> encoded;
             if (flt.values.length != 1) {
                 throw new RuntimeException("Only one value allowed for EQ filter");
             }
             encoded = enc.encode(flt.values[0]);
+            if (type == Spec.IndexingType.Prefix) {
+                tobuf.write(scoreBucket);
+            }
             tobuf.write(encoded.get(0));
             tobuf.write(SEPARATOR);
+            if (type == Spec.IndexingType.Prefix) {
+                frbuf.write(scoreBucket);
+            }
             frbuf.write(encoded.get(0));
             frbuf.write(SEPARATOR);
         }
@@ -424,9 +515,10 @@ public class SimpleIndex extends BaseIndex {
          * @param tobuf the "to" range byte buffer
          * @param flt the filter we are encoding
          * @param enc the encoder we are using
+         * @param type
          * @throws IOException
          */
-        private void encodeGreaterRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+        private void encodeGreaterRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc, Spec.IndexingType type) throws IOException {
             List<byte[]> encoded;
             if (flt.values.length != 1) {
                 throw new RuntimeException("Exactly one value allowed for GT filter");
@@ -434,7 +526,9 @@ public class SimpleIndex extends BaseIndex {
 
             encoded = enc.encode(flt.values[0]);
             byte[] bs = encoded.get(0);
-
+            if (type == Spec.IndexingType.Prefix) {
+                frbuf.write(scoreBucket);
+            }
             frbuf.write(bs);
             frbuf.write(SEPARATOR);
             // write 0xff * the size of the encoded value
@@ -442,11 +536,14 @@ public class SimpleIndex extends BaseIndex {
             for (int n = 0; n < bs.length; n++) {
                 bs[n] = (byte) 0xff;
             }
+            if (type == Spec.IndexingType.Prefix) {
+                tobuf.write(scoreBucket);
+            }
             tobuf.write(bs);
             tobuf.write(SEPARATOR);
         }
 
-        private void encodeLessRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
+        private void encodeLessRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc, Spec.IndexingType type) throws IOException {
             List<byte[]> encoded;
             if (flt.values.length != 1) {
                 throw new RuntimeException("Exactly one value allowed for GT filter");
@@ -454,6 +551,9 @@ public class SimpleIndex extends BaseIndex {
             encoded = enc.encode(flt.values[0]);
             byte[] bs = encoded.get(0);
 
+            if (type == Spec.IndexingType.Prefix) {
+                tobuf.write(scoreBucket);
+            }
             tobuf.write(bs);
             tobuf.write(SEPARATOR);
 
@@ -461,6 +561,9 @@ public class SimpleIndex extends BaseIndex {
             // write 0x00 * the size of the encoded value
             for (int n = 0; n < bs.length; n++) {
                 bs[n] = (byte) 0x00;
+            }
+            if (type == Spec.IndexingType.Prefix) {
+                frbuf.write(scoreBucket);
             }
             frbuf.write(bs);
             frbuf.write(SEPARATOR);
