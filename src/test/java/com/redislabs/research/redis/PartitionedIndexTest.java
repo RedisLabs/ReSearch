@@ -30,9 +30,9 @@ public class PartitionedIndexTest extends TestCase {
         Spec spec = new Spec(Spec.prefix("foo", true));
         PartitionedIndex pi = PartitionedIndex.newSimple("foo", spec, 3, 500, 3, "redis://localhost:6379");
         Document[] docs = new Document[] {
-                new Document("doc1").setScore(1.0).set("foo", "hello world").set("bar", Math.PI),
-                new Document("doc2").setScore(3.0).set("foo", "hello werld").set("bar", Math.PI+1),
-                new Document("doc3").setScore(2.0).set("foo", "jello world").set("bar", Math.PI-1),
+                new Document("doc1").setScore(1.0f).set("foo", "hello world").set("bar", Math.PI),
+                new Document("doc2").setScore(3.0f).set("foo", "hello werld wat wat in the butt").set("bar", Math.PI+1),
+                new Document("doc3").setScore(2.0f).set("foo", "jello world").set("bar", Math.PI-1),
         };
 
         pi.index(docs);
@@ -55,7 +55,7 @@ public class PartitionedIndexTest extends TestCase {
             e.printStackTrace();
             fail();
         } finally {
-            pi.drop();
+            //pi.drop();
         }
 
     }

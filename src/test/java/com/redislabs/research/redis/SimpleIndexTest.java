@@ -21,7 +21,7 @@ public class SimpleIndexTest extends TestCase {
 
     public void testEncode() throws Exception {
 
-        Document doc = new Document("123").setScore(0.512).set("foo", "hello world").set("bar", 123);
+        Document doc = new Document("123").setScore(0.512f).set("foo", "hello world").set("bar", 123);
 
         Spec spec = new Spec(Spec.prefix("foo",false), Spec.numeric("bar"));
 
@@ -31,7 +31,7 @@ public class SimpleIndexTest extends TestCase {
 
         Index.Entry ent = idx.extractEntry(entries.get(0));
         assertEquals(doc.getId(), ent.id);
-        assertEquals(doc.getScore(), ent.score);
+        assertEquals(doc.getScore(), ent.score, 0.0001);
 
 
 
@@ -57,9 +57,9 @@ public class SimpleIndexTest extends TestCase {
         SimpleIndex idx = new SimpleIndex("redis://localhost:6379", "myindex", spec);
 
         Document[] docs = {
-                new Document("doc1").setScore(1.0).set("foo", "hello world").set("bar", Math.PI),
-                new Document("doc2").setScore(2.0).set("foo", "hello werld").set("bar", Math.PI+1),
-                new Document("doc3").setScore(1.0).set("foo", "jello world").set("bar", Math.PI-1),
+                new Document("doc1").setScore(1.0f).set("foo", "hello world").set("bar", Math.PI),
+                new Document("doc2").setScore(2.0f).set("foo", "hello werld").set("bar", Math.PI+1),
+                new Document("doc3").setScore(1.0f).set("foo", "jello world").set("bar", Math.PI-1),
         };
 
         try {
@@ -113,8 +113,8 @@ public class SimpleIndexTest extends TestCase {
 
             SimpleIndex.Range rng = idx.getRange(q);
 
-            assertEquals("2800000000000004D27C", HexBin.encode(rng.from));
-            assertEquals("28FFFFFFFFFFFFFFFF7CFF", HexBin.encode(rng.to));
+            assertEquals("2800000000000004D23A", HexBin.encode(rng.from));
+            assertEquals("28FFFFFFFFFFFFFFFF3AFF", HexBin.encode(rng.to));
 
         } catch (IOException e) {
             fail();
@@ -127,8 +127,8 @@ public class SimpleIndexTest extends TestCase {
 
             SimpleIndex.Range rng = idx.getRange(q);
 
-            assertEquals("5B00000000000004D27C", HexBin.encode(rng.from));
-            assertEquals("28FFFFFFFFFFFFFFFF7CFF", HexBin.encode(rng.to));
+            assertEquals("5B00000000000004D23A", HexBin.encode(rng.from));
+            assertEquals("28FFFFFFFFFFFFFFFF3AFF", HexBin.encode(rng.to));
 
         } catch (IOException e) {
             fail();
@@ -141,8 +141,8 @@ public class SimpleIndexTest extends TestCase {
 
             SimpleIndex.Range rng = idx.getRange(q);
 
-            assertEquals("5B00000000000000007C", HexBin.encode(rng.from));
-            assertEquals("2800000000000004D27CFF", HexBin.encode(rng.to));
+            assertEquals("5B00000000000000003A", HexBin.encode(rng.from));
+            assertEquals("2800000000000004D23AFF", HexBin.encode(rng.to));
 
         } catch (IOException e) {
             fail();
@@ -155,8 +155,8 @@ public class SimpleIndexTest extends TestCase {
 
             SimpleIndex.Range rng = idx.getRange(q);
 
-            assertEquals("5B00000000000000007C", HexBin.encode(rng.from));
-            assertEquals("5B00000000000004D27CFF", HexBin.encode(rng.to));
+            assertEquals("5B00000000000000003A", HexBin.encode(rng.from));
+            assertEquals("5B00000000000004D23AFF", HexBin.encode(rng.to));
 
         } catch (IOException e) {
             fail();

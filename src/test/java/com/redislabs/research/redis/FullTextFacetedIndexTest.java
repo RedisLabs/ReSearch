@@ -49,11 +49,11 @@ public class FullTextFacetedIndexTest extends TestCase {
         }
 
         Document[] docs = {
-                new Document("doc1", 0.1).set("foo", "hello world").set("bar", Math.PI)
+                new Document("doc1", 0.1f).set("foo", "hello world").set("bar", Math.PI)
                         .set("location",  new Double[]{40.7142700, -74.0059700}),
-                new Document("doc2", 0.2).set("foo", "hello werld").set("bar", Math.PI+1)
+                new Document("doc2", 0.2f).set("foo", "hello werld").set("bar", Math.PI+1)
                         .set("location",  new Double[]{40.7842700, -74.0159700}),
-                new Document("doc3", 0.3).set("foo", "jello world").set("bar", Math.PI-1)
+                new Document("doc3", 0.3f).set("foo", "jello world").set("bar", Math.PI-1)
                         .set("location",  new Double[]{40.7242700, -74.0259700}),
         };
 

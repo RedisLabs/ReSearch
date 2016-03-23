@@ -20,7 +20,7 @@ public class EncodersTest extends TestCase {
         byte []bs = enc.encode((3.4456)).get(0);
 
         assertEquals("400B9096BB98C7E3",HexBin.encode(enc.encode((3.4456d)).get(0)));
-        assertEquals("400B9096C0000000",HexBin.encode(enc.encode((float)3.4456).get(0)));
+        assertEquals("405C84B6",HexBin.encode(enc.encode((float)3.4456).get(0)));
         assertTrue(HexBin.encode(enc.encode(3.4456).get(0)).compareTo(HexBin.encode(enc.encode((2.4456)).get(0))) > 0);
 
         assertEquals("0000000000000005",HexBin.encode(enc.encode(5).get(0)));
@@ -46,6 +46,7 @@ public class EncodersTest extends TestCase {
 
 
     }
+
 
 
     public void testGeoHashEncoder() {

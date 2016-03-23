@@ -3,12 +3,10 @@ package com.redislabs.research.redis;
 import ch.hsr.geohash.GeoHash;
 import com.redislabs.research.text.NaiveNormalizer;
 import com.redislabs.research.text.TextNormalizer;
-import com.sun.deploy.util.ArrayUtil;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -70,8 +68,6 @@ public class Encoders {
 
             // optionally find all suffixes that begin with a space and encode them as well
             if (extractSuffixes && normalized.indexOf(' ') > 0) {
-
-
                 int index = normalized.indexOf(' ');
                 while (index > 0 && index < normalized.length()) {
                     ret.add(normalized.substring(index+1).getBytes());

@@ -1,4 +1,5 @@
 package com.redislabs.research.redis;
+
 import com.redislabs.research.Index;
 import redis.clients.jedis.*;
 import com.redislabs.research.Document;
@@ -20,6 +21,9 @@ import java.util.*;
  */
 public class SimpleIndex extends BaseIndex {
 
+
+    public static final byte SEPARATOR = ':';
+
     public static class Factory implements IndexFactory {
         @Override
         public Index create(String name, Spec spec, String redisURI) {
@@ -30,12 +34,14 @@ public class SimpleIndex extends BaseIndex {
     // a map of type to encoder
     private Map<String, Encoder> encoders = new HashMap<>();
 
-    private Encoder<Number> scoreEncoder = new Encoders.Numeric();
+    private Encoder scoreEncoder = new Encoders.Numeric();
+
     /**
      * Constructor
+     *
      * @param redisURI the redis server we connect to
-     * @param name the index name
-     * @param spec index spec
+     * @param name     the index name
+     * @param spec     index spec
      */
     public SimpleIndex(String redisURI, String name, Spec spec) {
         super(name, spec, redisURI);
@@ -50,16 +56,16 @@ public class SimpleIndex extends BaseIndex {
 
             switch (f.type) {
                 case Prefix:
-                    encoders.put(f.name, new Encoders.Prefix(new NaiveNormalizer(), ((Spec.PrefixField)f).indexSuffixes));
+                    encoders.put(f.name, new Encoders.Prefix(new NaiveNormalizer(), ((Spec.PrefixField) f).indexSuffixes));
                     break;
                 case Numeric:
                     encoders.put(f.name, new Encoders.Numeric());
                     break;
                 case Geo:
-                    encoders.put(f.name, new Encoders.Geohash(((Spec.GeoField)f).precision));
+                    encoders.put(f.name, new Encoders.Geohash(((Spec.GeoField) f).precision));
                     break;
                 default:
-                    throw  new RuntimeException("Invalid index type " + f.type.toString());
+                    throw new RuntimeException("Invalid index type " + f.type.toString());
             }
 
         }
@@ -70,10 +76,11 @@ public class SimpleIndex extends BaseIndex {
 
     /**
      * index a set of coduments in the index. This is done with a single pipeline for speed
+     *
      * @param docs a list of documents to be indexed
      */
     @Override
-    public Boolean index(Document ...docs) throws IOException {
+    public Boolean index(Document... docs) throws IOException {
 
 
         Jedis conn = pool.getResource();
@@ -102,7 +109,8 @@ public class SimpleIndex extends BaseIndex {
 
     /**
      * Takes the raw encoded query from the sorted set and extracts id and score by decoding it.
-     * e.g. "world||?\xf0\x00\x00\x00\x00\x00\x00|doc1" --> Entry(id: doc1, score: 1.0)
+     * e.g. "world::?\xf0\x00\x00\x00\x00\x00\x00|doc1" --> Entry(id: doc1, score: 1.0)
+     *
      * @param raw the raw entry in the sorted set
      * @return a new Entry object
      */
@@ -112,7 +120,7 @@ public class SimpleIndex extends BaseIndex {
         int idx = -1;
         int idIdx = -1;
         for (int i = 0; i < raw.length; i++) {
-            if (raw[i] == '|' && i < raw.length - 1 && raw[i+1] == '|') {
+            if (raw[i] == SEPARATOR && i < raw.length - 1 && raw[i + 1] == SEPARATOR) {
                 idx = i + 2;
                 break;
             }
@@ -121,8 +129,8 @@ public class SimpleIndex extends BaseIndex {
             throw new RuntimeException("Invalid id entry: " + new String(raw));
         }
         for (int i = idx; i < raw.length; i++) {
-            if (raw[i] == '|') {
-                idIdx = i+1;
+            if (raw[i] == SEPARATOR) {
+                idIdx = i + 1;
                 break;
             }
         }
@@ -131,17 +139,18 @@ public class SimpleIndex extends BaseIndex {
         }
 
 
-        String id = new String(raw, idIdx, raw.length-idIdx);
-        ByteBuffer bb = ByteBuffer.wrap(raw, idx, idIdx - idx -1);
-        //bb.order(ByteOrder.BIG_ENDIAN);
+        String id = new String(raw, idIdx, raw.length - idIdx);
+        ByteBuffer bb = ByteBuffer.wrap(raw, idx, idIdx - idx - 1);
 
         double score = Float.intBitsToFloat(bb.getInt());
 
-        return new Entry(id, 1d/score);
+        return new Entry(id, score);
 
     }
+
     /**
      * Get ids of documents indexed in the index
+     *
      * @param q the query to look for
      * @return a list of string ids
      * @throws IOException
@@ -163,9 +172,8 @@ public class SimpleIndex extends BaseIndex {
         }
 
 
-
         // extract the ids from the entries
-        List<Entry>ids = new ArrayList<>(entries.size());
+        List<Entry> ids = new ArrayList<>(entries.size());
         for (byte[] entry : entries) {
             //String se = new String(entry);
             ids.add(extractEntry(entry));
@@ -176,6 +184,7 @@ public class SimpleIndex extends BaseIndex {
 
     /**
      * Delete document-ids from the index
+     *
      * @param ids the list of ids to delete
      */
     @Override
@@ -197,6 +206,7 @@ public class SimpleIndex extends BaseIndex {
 
     /**
      * Encode a document's values into ZSET values to be indexed
+     *
      * @param doc the cdocument to encode
      * @return the index entries for this document.
      * @throws IOException
@@ -214,38 +224,8 @@ public class SimpleIndex extends BaseIndex {
                 throw new RuntimeException("Missing encoder for " + field.name);
             }
 
-            List<byte[]> bytes = enc.encode(Objects.requireNonNull(prop));
-
-            if (field.type == Spec.IndexingType.Prefix) {
-
-                byte[] scoreBytes = scoreEncoder.encode(doc.getScore()).get(0);
-                int n = 0;
-                for (byte[] tmpBytes : bytes) {
-                    int mx = Math.max(scoreBytes.length, tmpBytes.length);
-                    ByteArrayOutputStream buf = new ByteArrayOutputStream(mx);
-                    for (int i =0; i < mx; i++) {
-
-                        if (i < tmpBytes.length) {
-                            buf.write(tmpBytes[i]);
-                        } else if (i < 4 && tmpBytes.length < 4) {
-                            buf.write(0);
-                        }
-
-                        if (i < scoreBytes.length) {
-                            buf.write((byte)(0xff-scoreBytes[i]));
-                        }
-                    }
-
-                    bytes.set(n, buf.toByteArray());
-                    n++;
-
-                }
-
-
-
-
-            }
-
+            List<byte[]> bytes;
+                bytes = enc.encode(Objects.requireNonNull(prop));
 
             encoded.add(bytes);
 
@@ -264,16 +244,16 @@ public class SimpleIndex extends BaseIndex {
 
 
                 buf.write(bs);
-                buf.write('|');
+                buf.write(SEPARATOR);
 
             }
             // append the getId to the entry
-            buf.write('|');
-            buf.write(scoreEncoder.encode(doc.getScore()).get(0));
-            buf.write('|');
-            buf.write(doc.getId().getBytes());
-            //append the document score
+            buf.write(SEPARATOR);
 
+            List<byte[]> sce = scoreEncoder.encode((Number)doc.getScore());
+            buf.write(sce.get(0));
+            buf.write(SEPARATOR);
+            buf.write(doc.getId().getBytes());
 
 
             ret.add(buf.toByteArray());
@@ -289,12 +269,13 @@ public class SimpleIndex extends BaseIndex {
     Range getRange(Query q) throws IOException {
         return new Range(q);
     }
+
     /**
      * Range represents a lexicographical range
      */
     class Range {
-        byte []from;
-        byte []to;
+        byte[] from;
+        byte[] to;
 
 
         public Range(Query q) throws IOException, RuntimeException {
@@ -327,9 +308,9 @@ public class SimpleIndex extends BaseIndex {
 
                 Encoder enc = encoders.get(field.name);
                 if (enc == null) {
-                    throw new RuntimeException("No encoder for field type "+field.name);
+                    throw new RuntimeException("No encoder for field type " + field.name);
                 }
-                List<byte[]> encoded;
+
                 switch (flt.op) {
                     case Equals:
                         encodeEqualRange(frbuf, tobuf, flt, enc);
@@ -346,7 +327,7 @@ public class SimpleIndex extends BaseIndex {
                     case Near:
                         encodeNearRange(frbuf, tobuf, flt, enc);
                         break;
-                        // TODO - implement those...
+                    // TODO - implement those...
                     case Greater:
                         encodeGreaterRange(frbuf, tobuf, flt, enc);
                         lowerInclusive = false;
@@ -386,7 +367,6 @@ public class SimpleIndex extends BaseIndex {
         }
 
 
-
         private void encodeNearRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
             List<byte[]> encoded;
             if (flt.values.length != 2 || !(flt.values instanceof Double[])) {
@@ -394,40 +374,21 @@ public class SimpleIndex extends BaseIndex {
             }
             encoded = enc.encode(flt.values);
             tobuf.write(encoded.get(0));
-            tobuf.write('|');
+            tobuf.write(SEPARATOR);
             frbuf.write(encoded.get(0));
-            frbuf.write('|');
+            frbuf.write(SEPARATOR);
         }
 
         private void encodePrefixRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
-            byte[] encoded;
+
             if (flt.values.length != 1) {
                 throw new RuntimeException("Only one value allowed for PREFIX filter");
             }
-            encoded = (byte[]) enc.encode(flt.values[0]).get(0);
-            ByteArrayOutputStream interleaved = new ByteArrayOutputStream(encoded.length + 4);
-            for (int i = 0; i <encoded.length; i++) {
-
-                if (i < encoded.length) {
-                    interleaved.write(encoded[i]);
-                } else if (i < 4) {
-                    interleaved.write(0);
-                }
-                if (i < 4) {
-                    interleaved.write(0);
-                }
+            byte[] encoded = (byte[]) enc.encode(flt.values[0]).get(0);
 
 
-            }
-
-            byte []inter = interleaved.toByteArray();
-
-            frbuf.write(inter);
-            inter[1] = (byte) 0xff;
-            inter[3] = (byte) 0xff;
-            inter[5] = (byte) 0xff;
-            inter[7] = (byte) 0xff;
-            tobuf.write(inter);
+            frbuf.write(encoded);
+            tobuf.write(encoded);
         }
 
         private void encodeBetweenRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
@@ -437,10 +398,10 @@ public class SimpleIndex extends BaseIndex {
             }
             encoded = enc.encode(flt.values[0]);
             frbuf.write(encoded.get(0));
-            frbuf.write('|');
+            frbuf.write(SEPARATOR);
             encoded = enc.encode(flt.values[1]);
             tobuf.write(encoded.get(0));
-            tobuf.write('|');
+            tobuf.write(SEPARATOR);
         }
 
         private void encodeEqualRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
@@ -450,19 +411,19 @@ public class SimpleIndex extends BaseIndex {
             }
             encoded = enc.encode(flt.values[0]);
             tobuf.write(encoded.get(0));
-            tobuf.write('|');
+            tobuf.write(SEPARATOR);
             frbuf.write(encoded.get(0));
-            frbuf.write('|');
-            return;
+            frbuf.write(SEPARATOR);
         }
 
 
         /**
          * Encode a lexical range for a GT filter. basically we encode the range as value - \xff\xff\xff\xff\xff
-         * @param frbuf
-         * @param tobuf
-         * @param flt
-         * @param enc
+         *
+         * @param frbuf the "from" range byte buffer
+         * @param tobuf the "to" range byte buffer
+         * @param flt the filter we are encoding
+         * @param enc the encoder we are using
          * @throws IOException
          */
         private void encodeGreaterRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
@@ -472,17 +433,17 @@ public class SimpleIndex extends BaseIndex {
             }
 
             encoded = enc.encode(flt.values[0]);
-            byte []bs = encoded.get(0);
+            byte[] bs = encoded.get(0);
 
             frbuf.write(bs);
-            frbuf.write('|');
+            frbuf.write(SEPARATOR);
             // write 0xff * the size of the encoded value
             // TODO - do it properly for numeric types
             for (int n = 0; n < bs.length; n++) {
                 bs[n] = (byte) 0xff;
             }
             tobuf.write(bs);
-            tobuf.write('|');
+            tobuf.write(SEPARATOR);
         }
 
         private void encodeLessRange(ByteArrayOutputStream frbuf, ByteArrayOutputStream tobuf, Query.Filter flt, Encoder enc) throws IOException {
@@ -491,10 +452,10 @@ public class SimpleIndex extends BaseIndex {
                 throw new RuntimeException("Exactly one value allowed for GT filter");
             }
             encoded = enc.encode(flt.values[0]);
-            byte []bs = encoded.get(0);
+            byte[] bs = encoded.get(0);
 
             tobuf.write(bs);
-            tobuf.write('|');
+            tobuf.write(SEPARATOR);
 
 
             // write 0x00 * the size of the encoded value
@@ -502,11 +463,10 @@ public class SimpleIndex extends BaseIndex {
                 bs[n] = (byte) 0x00;
             }
             frbuf.write(bs);
-            frbuf.write('|');
+            frbuf.write(SEPARATOR);
         }
 
     }
-
 
 
     // TODO - move this to some util
@@ -516,7 +476,7 @@ public class SimpleIndex extends BaseIndex {
         for (List<T> set : sets) {
             if (ret.isEmpty()) {
                 for (T t : set) {
-                   List<T> tuple = new ArrayList<T>();
+                    List<T> tuple = new ArrayList<>();
                     tuple.add(t);
                     ret.add(tuple);
                 }
