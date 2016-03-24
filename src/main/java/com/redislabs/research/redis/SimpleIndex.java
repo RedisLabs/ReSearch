@@ -286,7 +286,13 @@ public class SimpleIndex extends BaseIndex {
 
     }
 
-    class BucketEstimator {
+    /**
+     * BucketEstimator uses sampling to estimate the score buckets of documents.
+     * We use it to divide prefix indexes to "score buckets", and try the best buckets first.
+     * This is an approximation designed to overcome the natural problem with ZLEX ranges that
+     * cannot be used with scores.
+     */
+    static class BucketEstimator {
         private Estimator<Float> estimator;
         private Quantile[] quantiles;
         private float sampleRate;
