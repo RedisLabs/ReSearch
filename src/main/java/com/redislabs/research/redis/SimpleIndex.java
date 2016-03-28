@@ -119,18 +119,18 @@ public class SimpleIndex extends BaseIndex {
     Entry extractEntry(byte[] raw) {
 
 
-        int idx = -1;
+        int scoreIdx = -1;
         int idIdx = -1;
         for (int i = 0; i < raw.length; i++) {
             if (raw[i] == SEPARATOR && i < raw.length - 1 && raw[i + 1] == SEPARATOR) {
-                idx = i + 2;
+                scoreIdx = i + 2;
                 break;
             }
         }
-        if (idx == -1) {
+        if (scoreIdx == -1) {
             throw new RuntimeException("Invalid id entry: " + new String(raw));
         }
-        for (int i = idx; i < raw.length; i++) {
+        for (int i = scoreIdx+4; i < raw.length; i++) {
             if (raw[i] == SEPARATOR) {
                 idIdx = i + 1;
                 break;
@@ -142,7 +142,7 @@ public class SimpleIndex extends BaseIndex {
 
 
         String id = new String(raw, idIdx, raw.length - idIdx);
-        ByteBuffer bb = ByteBuffer.wrap(raw, idx, idIdx - idx - 1);
+        ByteBuffer bb = ByteBuffer.wrap(raw, scoreIdx, idIdx - scoreIdx - 1);
 
         double score = Float.intBitsToFloat(bb.getInt());
 

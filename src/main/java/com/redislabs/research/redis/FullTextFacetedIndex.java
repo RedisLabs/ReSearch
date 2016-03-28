@@ -66,8 +66,30 @@ public class FullTextFacetedIndex extends BaseIndex {
     }
 
     private void initScripts(String redisURI) throws IOException {
-        zrangeByScoreStore = LuaScript.fromResource("lua/zrangebyscore_store.lua", redisURI);
-        intersectTokens = LuaScript.fromResource("lua/tokens_intersect.lua", redisURI);
+        zrangeByScoreStore = LuaScript.fromSource("local tbl = redis.call('ZRANGEBYSCORE', KEYS[1],  ARGV[1], ARGV[2], 'WITHSCORES')\n" +
+                "\n" +
+                "for i,_ in ipairs(tbl) do\n" +
+                "    if i % 2 == 1 then\n" +
+                "        tbl[i], tbl[i+1] =tbl[i+1], tbl[i]\n" +
+                "    end\n" +
+                "end\n" +
+                "redis.call('ZADD', KEYS[2], unpack(tbl))", redisURI);
+
+        intersectTokens = LuaScript.fromSource("local tbl = {}\n" +
+                "local numKeys = table.getn(ARGV)\n" +
+                "\n" +
+                "-- we call ZCARD to get the number of docs the word appears in \n" +
+                "for i,elem in ipairs(ARGV) do\n" +
+                "    tbl[i] = ARGV[i]\n" +
+                "    tbl[i+numKeys+1] = math.log(1000000/(1+redis.call('ZCARD', elem)))\n" +
+                "end\n" +
+                "tbl[numKeys+1] = 'WEIGHTS'\n" +
+                "table.insert(tbl, 'AGGREGATE')\n" +
+                "table.insert(tbl, 'SUM')\n" +
+                "\n" +
+                "local rc = redis.call('ZINTERSTORE', KEYS[1], numKeys, unpack(tbl))\n" +
+                "redis.expire(KEYS[1], 60)\n" +
+                "return redis.status_reply(rc)\n", redisURI);
     }
 
     @Override
@@ -189,9 +211,10 @@ public class FullTextFacetedIndex extends BaseIndex {
             }
 
         }
+        mergedTokens.normalize(mergedTokens.getMaxFreq());
 
         for (Token tok : mergedTokens.values()) {
-            pipe.zadd(tokenKey(tok.text), doc.getScore() * tok.frequency, doc.getId());
+            pipe.zadd(tokenKey(tok.text), doc.getScore() * (0.5 + 0.5*tok.frequency), doc.getId());
         }
 
         // only if the connection was not provided to us - commit everything
@@ -216,7 +239,7 @@ public class FullTextFacetedIndex extends BaseIndex {
 
         public QueryExecutionPlan(Query query) {
 
-            root = new IntersectStep();
+            root = null;
             this.query = query;
             for (Query.Filter flt : query.filters) {
                 Spec.Field field = null;
@@ -227,6 +250,7 @@ public class FullTextFacetedIndex extends BaseIndex {
                     }
                 }
 
+                Step s = null;
                 switch (field.type) {
 
                     case FullText:
@@ -236,7 +260,8 @@ public class FullTextFacetedIndex extends BaseIndex {
                         if (flt.values.length != 1) {
                             throw new RuntimeException("Only one string value is allowed for fulltext filters");
                         }
-                        root.addChild(new TextIntersectStep((String) flt.values[0]));
+                        s = new TextIntersectStep((String) flt.values[0]);
+
                         break;
                     case Numeric:
                         Double min, max = null;
@@ -255,8 +280,8 @@ public class FullTextFacetedIndex extends BaseIndex {
                             default:
                                 throw new RuntimeException("Unsupported numeric op!");
                         }
+                        s = new RangeStep(flt.property, min, max);
 
-                        root.addChild(new RangeStep(flt.property, min, max));
                         break;
                     case Geo:
                         if (flt.op != Query.Op.Radius) {
@@ -265,12 +290,18 @@ public class FullTextFacetedIndex extends BaseIndex {
                         double lat = (double) flt.values[0];
                         double lon = (double) flt.values[1];
                         double radius = (double) flt.values[2];
-                        root.addChild(new GeoRadiusStep(lat, lon, radius, ((Spec.GeoField) field).precision));
+                        s = new GeoRadiusStep(lat, lon, radius, ((Spec.GeoField) field).precision);
+
                         break;
                     default:
                         throw new RuntimeException("Unsupported field type: " + field.type.toString());
+                }
 
+                if (root == null) {
+                    root = s;
 
+                } else if(s != null) {
+                    root.addChild(s);
                 }
             }
             //System.out.println(root.toString());

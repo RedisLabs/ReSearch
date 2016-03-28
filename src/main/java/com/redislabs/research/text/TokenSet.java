@@ -30,9 +30,21 @@ public class TokenSet extends HashMap<String, Token> {
         }
     }
 
-    public void normalize() {
+    public double getTotalFreq(){
+        return totalFreq;
+    }
 
-        if (totalFreq > 0) {
+    public double getMaxFreq() {
+        double mx = 0;
+        for (Token t : values()) {
+            mx = Math.max(mx, t.frequency);
+        }
+        return mx;
+    }
+
+    public void normalize(double factor) {
+
+        if (factor > 0) {
             for (Token t : values()) {
                 t.frequency /= totalFreq;
             }

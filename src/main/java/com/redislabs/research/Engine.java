@@ -163,7 +163,9 @@ public class Engine {
 
 
         List<String> docIds = searchIds(query);
-
+        if (docIds == null) {
+            return null;
+        }
         try {
             return store.load(docIds);
         } catch (Exception e) {

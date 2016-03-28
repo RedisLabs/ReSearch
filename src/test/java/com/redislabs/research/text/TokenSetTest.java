@@ -26,7 +26,7 @@ public class TokenSetTest extends TestCase {
         assertEquals(3d, ts.get("world").frequency);
         assertEquals(1d, ts.get("hello").frequency);
 
-        ts.normalize();
+        ts.normalize(ts.getTotalFreq());
 
         assertEquals(0.166d, ts.get("hello").frequency, 0.001);
         assertEquals(0.5d, ts.get("world").frequency, 0.001);
